@@ -94,15 +94,29 @@ const inp = {
   marginBottom:12, fontFamily:"inherit", background:"#FFF8FA", color:C.text,
 };
 
+// ── localStorage 헬퍼 ─────────────────────────────────────────
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
 // ═══════════════════════════════════════════════════════════════
 export default function App() {
   const [view,      setView]      = useState("month");
   const [curDate,   setCurDate]   = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selDate,   setSelDate]   = useState(todayStr);
-  const [events,    setEvents]    = useState(INIT_EVENTS);
-  const [todos,     setTodos]     = useState(INIT_TODOS);
-  const [cats,      setCats]      = useState(CAT_DEFAULTS);
+  const [events,    setEvents]    = useState(()=>load("jjanto_events", INIT_EVENTS));
+  const [todos,     setTodos]     = useState(()=>load("jjanto_todos",  INIT_TODOS));
+  const [cats,      setCats]      = useState(()=>load("jjanto_cats",   CAT_DEFAULTS));
   const [sideOpen,  setSideOpen]  = useState(true);
+
+  // 데이터 변경시 자동 저장
+  const setEventsS = v => { const n = typeof v==="function"?v(events):v; setEvents(n); save("jjanto_events",n); };
+  const setTodosS  = v => { const n = typeof v==="function"?v(todos):v;  setTodos(n);  save("jjanto_todos",n);  };
+  const setCatsS   = v => { const n = typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   };
 
   const [hideCompleted, setHideCompleted] = useState({apptech: false});
   // 사이드바 오늘 일정 필터 탭
@@ -193,11 +207,11 @@ export default function App() {
     // 색상을 선택된 분류 색상으로 자동 맞추기
     const cat = catById(form.catId);
     const colored = {...form, color: cat?.color || form.color};
-    if(modal==="addEvent") setEvents(p=>[...p, {...colored, id:genId()}]);
-    else setEvents(p=>p.map(e=>e.id===form.id ? {...colored} : e));
+    if(modal==="addEvent") setEventsS(p=>[...p, {...colored, id:genId()}]);
+    else setEventsS(p=>p.map(e=>e.id===form.id ? {...colored} : e));
     setModal(null);
   }
-  function deleteEvent(id) { setEvents(p=>p.filter(e=>e.id!==id)); setModal(null); }
+  function deleteEvent(id) { setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
 
   // ── 할 일 helpers ────────────────────────────────────────────
   function openAddTodo(catId) { setTodoForm({title:"", date:""}); setTodoModal({mode:"add", catId}); }
@@ -206,13 +220,13 @@ export default function App() {
     if(!todoForm.title.trim()) return;
     const {mode, catId, item} = todoModal;
     if(mode==="add") {
-      setTodos(p=>({...p, [catId]:[...(p[catId]||[]), {id:genId(), title:todoForm.title, date:todoForm.date, done:false}]}));
+      setTodosS(p=>({...p, [catId]:[...(p[catId]||[]), {id:genId(), title:todoForm.title, date:todoForm.date, done:false}]}));
     } else {
-      setTodos(p=>({...p, [catId]:p[catId].map(t=>t.id===item.id ? {...t, title:todoForm.title, date:todoForm.date} : t)}));
+      setTodosS(p=>({...p, [catId]:p[catId].map(t=>t.id===item.id ? {...t, title:todoForm.title, date:todoForm.date} : t)}));
     }
     setTodoModal(null);
   }
-  function deleteTodo(catId, id) { setTodos(p=>({...p, [catId]:p[catId].filter(t=>t.id!==id)})); setTodoModal(null); }
+  function deleteTodo(catId, id) { setTodosS(p=>({...p, [catId]:p[catId].filter(t=>t.id!==id)})); setTodoModal(null); }
   function toggleTodo(catId, id) {
     const item = (todos[catId]||[]).find(t=>t.id===id);
     if(!item) return;
@@ -220,15 +234,15 @@ export default function App() {
     if(!item.done) {
       setProofModal({catId, item});
     } else {
-      setTodos(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:false,proof:null}:t)}));
+      setTodosS(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:false,proof:null}:t)}));
     }
   }
   function saveProof(catId, id, photoUrl) {
-    setTodos(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:true,proof:photoUrl}:t)}));
+    setTodosS(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:true,proof:photoUrl}:t)}));
     setProofModal(null);
   }
   function completeWithoutProof(catId, id) {
-    setTodos(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:true}:t)}));
+    setTodosS(p=>({...p, [catId]:p[catId].map(t=>t.id===id?{...t,done:true}:t)}));
     setProofModal(null);
   }
 
@@ -237,19 +251,19 @@ export default function App() {
     if(!catForm.name.trim()) return;
     if(catModal==="add") {
       const nid = genId();
-      setCats(p=>[...p, {id:nid, ...catForm, hidden:false}]);
-      setTodos(p=>({...p, [nid]:[]}));
+      setCatsS(p=>[...p, {id:nid, ...catForm, hidden:false}]);
+      setTodosS(p=>({...p, [nid]:[]}));
     } else {
-      setCats(p=>p.map(c=>c.id===catModal.id ? {...c, ...catForm} : c));
+      setCatsS(p=>p.map(c=>c.id===catModal.id ? {...c, ...catForm} : c));
     }
     setCatModal(null);
   }
   // 삭제 대신 숨기기 — 데이터 보존
   function hideCat(id) {
-    setCats(p=>p.map(c=>c.id===id ? {...c, hidden:true} : c));
+    setCatsS(p=>p.map(c=>c.id===id ? {...c, hidden:true} : c));
     setCatModal(null);
   }
-  function showCat(id) { setCats(p=>p.map(c=>c.id===id ? {...c, hidden:false} : c)); }
+  function showCat(id) { setCatsS(p=>p.map(c=>c.id===id ? {...c, hidden:false} : c)); }
 
   // ── 월 그리드 ────────────────────────────────────────────────
   function buildGrid() {
@@ -669,7 +683,7 @@ export default function App() {
                 <div style={{marginTop:10,fontSize:13,fontWeight:700,color:C.text,textAlign:"center"}}>{proofModal.item.title}</div>
                 <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}>
                   <button onClick={()=>{
-                    setTodos(p=>({...p,[proofModal.catId]:p[proofModal.catId].map(t=>t.id===proofModal.item.id?{...t,proof:null}:t)}));
+                    setTodosS(p=>({...p,[proofModal.catId]:p[proofModal.catId].map(t=>t.id===proofModal.item.id?{...t,proof:null}:t)}));
                     setProofModal(null);
                   }} style={{padding:"7px 14px",borderRadius:10,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>
                   <button onClick={()=>setProofModal(null)} style={{padding:"7px 18px",borderRadius:10,border:"none",cursor:"pointer",fontSize:13,fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>닫기</button>
