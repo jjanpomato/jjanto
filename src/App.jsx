@@ -268,7 +268,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
       </div>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(270px,1fr))",gap:isMobile?10:14}}>
         {activeCats.map(cat=>{
-          const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate));
+          const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])}));
           const pct=catPctOn(cat.id,selDate),isHiding=!!hideCompleted[cat.id];
           const vis=isHiding?items.filter(t=>!t.done):items, hiddenCount=items.filter(t=>t.done).length;
           return (
@@ -291,7 +291,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
               {vis.map(item=>(
                 <div key={item.id} style={{padding:"6px 0",borderBottom:`1px dashed ${C.border}`}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id)} style={{width:18,height:18,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
+                    <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:18,height:18,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
                     <span style={{flex:1,fontSize:13,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none",fontWeight:item.done?400:600}}>
                       {!item.date&&<span style={{fontSize:10,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>🔁</span>}{item.title}
                     </span>
@@ -329,7 +329,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
       </div>
       {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.title}</div><div style={{fontSize:11,color:C.sub}}>{e.time||"종일"}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
-      {activeCats.map(cat=>{ const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)); if(!items.length) return null; return (
+      {activeCats.map(cat=>{ const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])})); if(!items.length) return null; return (
         <div key={cat.id} style={{background:C.white,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${C.border}`,marginBottom:10}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800}}>{cat.name}</span></div>
@@ -338,7 +338,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
           <div style={{height:4,borderRadius:99,background:C.pink1,overflow:"hidden",marginBottom:8}}><div style={{width:`${catPctOn(cat.id,selDate)}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
           {items.map(item=>(
             <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${C.border}`}}>
-              <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id)} style={{width:20,height:20,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
+              <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:20,height:20,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
               <span style={{flex:1,fontSize:14,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</span>
             </div>
           ))}
@@ -453,9 +453,11 @@ export default function App() {
 
   const activeCats=cats.filter(c=>!c.hidden);
   const catById=id=>cats.find(c=>c.id===id);
-  const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>!t.date||isSame(t.date,ds)));
+  // 루틴(date 없음)은 doneLog[날짜] 로 날짜별 완료 상태를 별도 관리
+  const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
+  const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>!t.date||isSame(t.date,ds)).map(t=>({...t,done:isDone(t,ds)})));
   const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
-  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.date||isSame(t.date,ds)); return i.length?Math.round(i.filter(t=>t.done).length/i.length*100):0; };
+  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.date||isSame(t.date,ds)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; };
   function weeklyPct(wn,cid) {
     const y=curDate.getFullYear(),m=curDate.getMonth(),last=new Date(y,m+1,0).getDate();
     let done=0,total=0;
@@ -481,7 +483,15 @@ export default function App() {
   function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||""}); setTodoModal({mode:"edit",catId:cid,item}); }
   function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date}:t)})); setTodoModal(null); }
   function deleteTodo(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].filter(t=>t.id!==id)})); setTodoModal(null); }
-  function toggleTodo(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,done:!t.done}:t)})); }
+  function toggleTodo(cid,id,ds){
+    setTodosS(p=>({...p,[cid]:p[cid].map(t=>{
+      if(t.id!==id) return t;
+      if(t.date) return {...t,done:!t.done}; // 일반 할일
+      const log={...(t.doneLog||{})};
+      if(log[ds]) delete log[ds]; else log[ds]=true;
+      return {...t,doneLog:log};
+    })}));
+  }
   function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
   function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
@@ -628,7 +638,7 @@ export default function App() {
               <div><div style={{fontSize:18,fontWeight:800,color:C.rose}}>🍅 짠토의 플래너</div><div style={{fontSize:12,color:C.sub}}>{selDate}</div></div>
               <Ring pct={totalPctOn(selDate)} size={66} stroke={7} color={C.rose} bg={C.pink1}/>
             </div>
-            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)); if(!items.length) return null; return (
+            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])})); if(!items.length) return null; return (
               <div key={cat.id} style={{background:"rgba(255,255,255,0.7)",borderRadius:12,padding:"10px 14px",marginBottom:8}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>{cat.emoji}</span><span style={{fontSize:13,fontWeight:700}}>{cat.name}</span></div><span style={{fontSize:13,fontWeight:800,color:cat.color}}>{pct}%</span></div>
                 <div style={{height:7,borderRadius:99,background:C.pink1,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
