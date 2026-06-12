@@ -48,51 +48,68 @@ function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.par
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
 function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text" }) {
+  const [local, setLocal] = useState(value);
   const composing = useRef(false);
-  const ref = useRef(null);
 
+  // 외부에서 값이 바뀔 때만 (모달 열릴 때 등) 동기화
+  const prevValue = useRef(value);
   useEffect(() => {
-    if (ref.current && ref.current.value !== value) {
-      ref.current.value = value;
+    if (prevValue.current !== value) {
+      prevValue.current = value;
+      if (!composing.current) setLocal(value);
     }
   }, [value]);
 
   return (
     <input
-      ref={ref}
       type={type}
-      defaultValue={value}
+      value={local}
       placeholder={placeholder}
       autoFocus={autoFocus}
       style={style}
       onCompositionStart={() => { composing.current = true; }}
-      onCompositionEnd={(e) => { composing.current = false; onChange(e.target.value); }}
-      onChange={(e) => { if (!composing.current) onChange(e.target.value); }}
+      onCompositionEnd={(e) => {
+        composing.current = false;
+        setLocal(e.target.value);
+        onChange(e.target.value);
+      }}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        if (!composing.current) onChange(e.target.value);
+      }}
     />
   );
 }
 
 function KoreanTextarea({ value, onChange, style, placeholder, rows, onKeyDown }) {
+  const [local, setLocal] = useState(value);
   const composing = useRef(false);
-  const ref = useRef(null);
 
+  const prevValue = useRef(value);
   useEffect(() => {
-    if (ref.current && ref.current.value !== value) {
-      ref.current.value = value;
+    if (prevValue.current !== value) {
+      prevValue.current = value;
+      if (!composing.current) setLocal(value);
     }
   }, [value]);
 
   return (
     <textarea
-      ref={ref}
-      defaultValue={value}
+      value={local}
       placeholder={placeholder}
       rows={rows}
       style={style}
       onKeyDown={onKeyDown}
       onCompositionStart={() => { composing.current = true; }}
-      onCompositionEnd={(e) => { composing.current = false; onChange(e.target.value); }}
-      onChange={(e) => { if (!composing.current) onChange(e.target.value); }}
+      onCompositionEnd={(e) => {
+        composing.current = false;
+        setLocal(e.target.value);
+        onChange(e.target.value);
+      }}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        if (!composing.current) onChange(e.target.value);
+      }}
     />
   );
 }
