@@ -412,7 +412,7 @@ export default function App() {
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
   const [todoModal, setTodoModal] =useState(null);
-  const [todoForm,  setTodoForm]  =useState({title:"",date:todayStr});
+  const [todoForm,  setTodoForm]  =useState({title:"",date:"",startDate:todayStr});
   const [catModal,  setCatModal]  =useState(null);
   const [catForm,   setCatForm]   =useState({name:"",emoji:"⭐",color:C.pink3});
 
@@ -456,11 +456,11 @@ export default function App() {
   // 루틴(date 없음)은 doneLog[날짜] 로 날짜별 완료 상태를 별도 관리
   const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
   // allTodosOn: archived 포함 (통계 반영용)
-  const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>!t.date||isSame(t.date,ds)).map(t=>({...t,done:isDone(t,ds)})));
+  const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)).map(t=>({...t,done:isDone(t,ds)})));
   // visibleTodosOn: archived 제외 (화면 표시용)
-  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,ds))).map(t=>({...t,done:isDone(t,ds)}));
+  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)).map(t=>({...t,done:isDone(t,ds)}));
   const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
-  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.date||isSame(t.date,ds)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; }; // archived 포함 통계
+  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; };
   function weeklyPct(wn,cid) {
     const y=curDate.getFullYear(),m=curDate.getMonth(),last=new Date(y,m+1,0).getDate();
     let done=0,total=0;
@@ -482,9 +482,9 @@ export default function App() {
   function openEditEvent(e){ setForm({...e}); setModal("editEvent"); }
   function saveEvent(){ if(!form.title.trim()) return; const cat=catById(form.catId); const c={...form,color:cat?.color||form.color}; if(modal==="addEvent") setEventsS(p=>[...p,{...c,id:genId()}]); else setEventsS(p=>p.map(e=>e.id===form.id?{...c}:e)); setModal(null); }
   function deleteEvent(id){ setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
-  function openAddTodo(cid){ setTodoForm({title:"",date:""}); setTodoModal({mode:"add",catId:cid}); }
-  function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||""}); setTodoModal({mode:"edit",catId:cid,item}); }
-  function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date}:t)})); setTodoModal(null); }
+  function openAddTodo(cid){ setTodoForm({title:"",date:"",startDate:todayStr}); setTodoModal({mode:"add",catId:cid}); }
+  function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr}); setTodoModal({mode:"edit",catId:cid,item}); }
+  function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,startDate:todoForm.date?undefined:todoForm.startDate,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date,startDate:todoForm.date?undefined:todoForm.startDate}:t)})); setTodoModal(null); }
   function deleteTodo(cid,id){
     const item=(todos[cid]||[]).find(t=>t.id===id);
     if(item && !item.date) {
@@ -617,6 +617,13 @@ export default function App() {
             </div>
           </div>
           {todoForm.date&&<input type="date" style={inp} value={todoForm.date} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>}
+          {!todoForm.date&&(
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 루틴 시작일</label>
+              <input type="date" style={{...inp,marginBottom:0}} value={todoForm.startDate||todayStr} onChange={e=>setTodoForm(p=>({...p,startDate:e.target.value}))}/>
+              <div style={{fontSize:10,color:C.sub,marginTop:4}}>이 날짜부터 달성률에 반영돼요</div>
+            </div>
+          )}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{!todoForm.date&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
             <button onClick={()=>setTodoModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
