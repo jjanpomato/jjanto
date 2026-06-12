@@ -240,7 +240,7 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
   );
 }
 
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isSameDate, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard}) {
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, isSameDate, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard}) {
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"12px 14px":"16px 20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
@@ -268,7 +268,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
       </div>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(270px,1fr))",gap:isMobile?10:14}}>
         {activeCats.map(cat=>{
-          const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])}));
+          const items=visibleTodosOn(cat.id,selDate);
           const pct=catPctOn(cat.id,selDate),isHiding=!!hideCompleted[cat.id];
           const vis=isHiding?items.filter(t=>!t.done):items, hiddenCount=items.filter(t=>t.done).length;
           return (
@@ -310,7 +310,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
   );
 }
 
-function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, toggleTodo, openAddTodo, openAddEvent, setSyncModal}) {
+function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, setSyncModal}) {
   const evs=eventsOn(selDate);
   return (
     <div style={{flex:1,overflow:"auto",padding:"14px 14px 80px"}}>
@@ -329,7 +329,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
       </div>
       {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.title}</div><div style={{fontSize:11,color:C.sub}}>{e.time||"종일"}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
-      {activeCats.map(cat=>{ const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])})); if(!items.length) return null; return (
+      {activeCats.map(cat=>{ const items=visibleTodosOn(cat.id,selDate); if(!items.length) return null; return (
         <div key={cat.id} style={{background:C.white,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${C.border}`,marginBottom:10}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800}}>{cat.name}</span></div>
@@ -455,9 +455,12 @@ export default function App() {
   const catById=id=>cats.find(c=>c.id===id);
   // 루틴(date 없음)은 doneLog[날짜] 로 날짜별 완료 상태를 별도 관리
   const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
+  // allTodosOn: archived 포함 (통계 반영용)
   const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>!t.date||isSame(t.date,ds)).map(t=>({...t,done:isDone(t,ds)})));
+  // visibleTodosOn: archived 제외 (화면 표시용)
+  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,ds))).map(t=>({...t,done:isDone(t,ds)}));
   const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
-  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.date||isSame(t.date,ds)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; };
+  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.date||isSame(t.date,ds)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; }; // archived 포함 통계
   function weeklyPct(wn,cid) {
     const y=curDate.getFullYear(),m=curDate.getMonth(),last=new Date(y,m+1,0).getDate();
     let done=0,total=0;
@@ -482,7 +485,16 @@ export default function App() {
   function openAddTodo(cid){ setTodoForm({title:"",date:""}); setTodoModal({mode:"add",catId:cid}); }
   function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||""}); setTodoModal({mode:"edit",catId:cid,item}); }
   function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date}:t)})); setTodoModal(null); }
-  function deleteTodo(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].filter(t=>t.id!==id)})); setTodoModal(null); }
+  function deleteTodo(cid,id){
+    const item=(todos[cid]||[]).find(t=>t.id===id);
+    if(item && !item.date) {
+      // 루틴: 숨김 처리로 과거 기록 보존
+      setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,archived:true}:t)}));
+    } else {
+      setTodosS(p=>({...p,[cid]:p[cid].filter(t=>t.id!==id)}));
+    }
+    setTodoModal(null);
+  }
   function toggleTodo(cid,id,ds){
     setTodosS(p=>({...p,[cid]:p[cid].map(t=>{
       if(t.id!==id) return t;
@@ -501,7 +513,7 @@ export default function App() {
   const sideEvents=sideFilter==="all"?eventsOn(todayStr):eventsOn(todayStr).filter(e=>e.catId===sideFilter);
 
   // 공통 props
-  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, toggleTodo, openAddTodo, openAddEvent, setSyncModal, eventsOn, catById };
+  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, setSyncModal, eventsOn, catById };
 
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Nunito','Apple SD Gothic Neo',sans-serif",background:C.bg,color:C.text,overflow:"hidden",flexDirection:"column"}}>
@@ -523,7 +535,7 @@ export default function App() {
               <button onClick={()=>openAddEvent(selDate)} style={{padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>🍅 추가</button>
             </div>
             {view==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
+            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
             {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} deleteMemo={deleteMemo}/>}
           </div>
         </div>
@@ -540,7 +552,7 @@ export default function App() {
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {mobileTab==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} deleteMemo={deleteMemo}/>}
           </div>
@@ -606,7 +618,7 @@ export default function App() {
           </div>
           {todoForm.date&&<input type="date" style={inp} value={todoForm.date} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            {todoModal.mode==="edit"&&<button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>}
+            {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{!todoForm.date&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
             <button onClick={()=>setTodoModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
             <button onClick={saveTodo} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>저장</button>
           </div>
