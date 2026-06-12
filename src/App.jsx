@@ -47,7 +47,6 @@ const INIT_TODOS = {
 function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fb; }catch{ return fb; } }
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
-// ── 한글 IME 안전 입력 컴포넌트 ─────────────────────────────
 function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text" }) {
   const composing = useRef(false);
   const ref = useRef(null);
@@ -150,7 +149,6 @@ export default function App() {
   const importRef=useRef(null);
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
-  const [proofModal,setProofModal]=useState(null);
   const [todoModal, setTodoModal] =useState(null);
   const [todoForm,  setTodoForm]  =useState({title:"",date:todayStr});
   const [catModal,  setCatModal]  =useState(null);
@@ -226,9 +224,7 @@ export default function App() {
   function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||""}); setTodoModal({mode:"edit",catId:cid,item}); }
   function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date}:t)})); setTodoModal(null); }
   function deleteTodo(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].filter(t=>t.id!==id)})); setTodoModal(null); }
-  function toggleTodo(cid,id){ const item=(todos[cid]||[]).find(t=>t.id===id); if(!item) return; if(!item.done) setProofModal({catId:cid,item}); else setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,done:false,proof:null}:t)})); }
-  function saveProof(cid,id,url){ setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,done:true,proof:url}:t)})); setProofModal(null); }
-  function completeWithoutProof(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,done:true}:t)})); setProofModal(null); }
+  function toggleTodo(cid,id){ setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,done:!t.done}:t)})); }
   function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
   function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
@@ -414,8 +410,6 @@ export default function App() {
                     <span style={{flex:1,fontSize:13,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none",fontWeight:item.done?400:600}}>
                       {!item.date&&<span style={{fontSize:10,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>🔁</span>}{item.title}
                     </span>
-                    {item.done&&item.proof?<img src={item.proof} onClick={()=>setProofModal({catId:cat.id,item,viewOnly:true})} style={{width:32,height:32,borderRadius:6,objectFit:"cover",border:`2px solid ${cat.color}`,cursor:"pointer",flexShrink:0}}/>
-                      :item.done?<button onClick={()=>setProofModal({catId:cat.id,item})} style={{fontSize:11,padding:"2px 7px",borderRadius:99,border:`1.5px dashed ${cat.color}`,background:"none",color:cat.color,cursor:"pointer",flexShrink:0}}>📷</button>:null}
                     <button onClick={()=>openEditTodo(cat.id,item)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,padding:0,opacity:.6}}>✏️</button>
                   </div>
                 </div>
@@ -460,8 +454,6 @@ export default function App() {
               <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${C.border}`}}>
                 <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id)} style={{width:20,height:20,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
                 <span style={{flex:1,fontSize:14,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</span>
-                {item.done&&item.proof?<img src={item.proof} onClick={()=>setProofModal({catId:cat.id,item,viewOnly:true})} style={{width:32,height:32,borderRadius:6,objectFit:"cover",border:`2px solid ${cat.color}`,cursor:"pointer"}}/>
-                  :item.done?<button onClick={()=>setProofModal({catId:cat.id,item})} style={{fontSize:18,background:"none",border:"none",cursor:"pointer",padding:0}}>📷</button>:null}
               </div>
             ))}
           </div>
@@ -633,30 +625,6 @@ export default function App() {
         </ModalWrap>
       )}
 
-      {proofModal&&(
-        <ModalWrap onClose={()=>setProofModal(null)} zIndex={200}>
-          {proofModal.viewOnly?(
-            <><div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:14}}>📷 인증샷</div>
-            <img src={proofModal.item.proof} style={{width:"100%",borderRadius:12,objectFit:"cover",maxHeight:280}} alt="인증샷"/>
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}>
-              <button onClick={()=>{setTodosS(p=>({...p,[proofModal.catId]:p[proofModal.catId].map(t=>t.id===proofModal.item.id?{...t,proof:null}:t)}));setProofModal(null);}} style={{padding:"7px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>
-              <button onClick={()=>setProofModal(null)} style={{padding:"7px 18px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>닫기</button>
-            </div></>
-          ):(
-            <><div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:4}}>📷 인증샷 추가</div>
-            <div style={{fontSize:12,color:C.sub,marginBottom:16}}>{proofModal.item.title}</div>
-            <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"28px",border:`2px dashed ${C.pink2}`,borderRadius:14,cursor:"pointer",background:"#FFF8FA",marginBottom:14}}>
-              <span style={{fontSize:36}}>📷</span><span style={{fontSize:14,fontWeight:700,color:C.sub}}>사진 선택 또는 촬영</span>
-              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>saveProof(proofModal.catId,proofModal.item.id,ev.target.result); r.readAsDataURL(f); }}/>
-            </label>
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <button onClick={()=>completeWithoutProof(proofModal.catId,proofModal.item.id)} style={{padding:"7px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>인증샷 없이 완료</button>
-              <button onClick={()=>setProofModal(null)} style={{padding:"7px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>취소</button>
-            </div></>
-          )}
-        </ModalWrap>
-      )}
-
       {shareCard&&(
         <ModalWrap onClose={()=>setShareCard(false)} zIndex={300}>
           <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16,textAlign:"center"}}>📸 오늘의 달성률 카드</div>
@@ -682,4 +650,3 @@ export default function App() {
     </div>
   );
 }
-
