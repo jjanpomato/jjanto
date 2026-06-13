@@ -1,9 +1,9 @@
 import { useState, useRef } from "react";
 
 const C = {
-  bg:"#FFF5F7", pink1:"#FFD6E0", pink2:"#FFB3C6", pink3:"#FF85A1",
-  rose:"#FF4D6D", tomato:"#E63946", text:"#3D2030", sub:"#B07A8A",
-  border:"#FFD6E0", white:"#FFFFFF",
+  bg:"#FFF8F6", pink1:"#FFE0D6", pink2:"#FFBCAA", pink3:"#FF7A5C",
+  rose:"#E8392A", tomato:"#C0392B", text:"#2D1A14", sub:"#9A6A5A",
+  border:"#FFCFC4", white:"#FFFFFF",
 };
 
 const CAT_DEFAULTS = [
@@ -118,9 +118,21 @@ function Bar({pct,color}) {
 
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 
+function TomatoRow({ count }) {
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>
+      {Array.from({length:count}).map((_,i)=>(
+        <span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>
+      ))}
+    </span>
+  );
+}
+
 function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }) {
   const y = curDate.getFullYear(), m = curDate.getMonth();
   const lastDay = new Date(y, m+1, 0).getDate();
+  const cardRef = useRef(null);
+  const [saving, setSaving] = useState(false);
 
   const weekMap = {};
   for (let d = 1; d <= lastDay; d++) {
@@ -171,10 +183,39 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     return items.length ? Math.round(items.filter(t=>t.done).length/items.length*100) : null;
   }
 
-  const DAY_LABELS_MON = ["월","화","수","목","금","토","일"];
+  async function saveImage() {
+    if (!cardRef.current || saving) return;
+    setSaving(true);
+    try {
+      await import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+      const canvas = await window.html2canvas(cardRef.current, { scale: 2, backgroundColor: "#FFF5F7", useCORS: true });
+      const a = document.createElement("a");
+      a.download = `짠토_주간달성률_${y}년${MONTHS_KO[m]}.png`;
+      a.href = canvas.toDataURL();
+      a.click();
+    } catch {
+      alert("카드를 길게 눌러 저장해봐요!");
+    }
+    setSaving(false);
+  }
+
+  // 주차별 토마토 개수: 최소 1개 항상 표시
+  function tomatoCount(pct) {
+    if (pct === 100) return 3;
+    if (pct !== null && pct >= 70) return 2;
+    return 1;
+  }
 
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
+      {/* 애니메이션 keyframe */}
+      <style>{`
+        @keyframes tomato-bounce {
+          from { transform: translateY(0px) rotate(-5deg); }
+          to   { transform: translateY(-4px) rotate(5deg); }
+        }
+      `}</style>
+
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()-1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>‹</button>
@@ -182,12 +223,30 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()+1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>›</button>
         </div>
         <div style={{fontSize:12,color:C.sub,background:C.pink1,padding:"4px 10px",borderRadius:99,fontWeight:700}}>📅 월요일 기준 주차</div>
+        <button onClick={saveImage} disabled={saving} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer",opacity:saving?0.7:1,boxShadow:`0 2px 10px ${C.rose}44`}}>
+          {saving ? "저장 중…" : "📸 이미지 저장"}
+        </button>
       </div>
 
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {/* 캡처 영역 */}
+      <div ref={cardRef} style={{display:"flex",flexDirection:"column",gap:14,padding:16,borderRadius:20,background:"linear-gradient(160deg,#FFF5F7,#FFE8EF)"}}>
+
+        {/* 카드 헤더 - 좌상단 🍅 짠토 */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:10,borderBottom:`1.5px dashed ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:26,filter:"drop-shadow(0 2px 3px rgba(200,50,30,.25))"}}>🍅</span>
+            <div>
+              <div style={{fontSize:16,fontWeight:900,color:C.rose,letterSpacing:"-0.3px"}}>짠토의 플래너</div>
+              <div style={{fontSize:11,color:C.sub}}>주간 달성률 리포트</div>
+            </div>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:C.sub,background:C.white,borderRadius:10,padding:"4px 12px",border:`1px solid ${C.border}`}}>{y}년 {MONTHS_KO[m]}</div>
+        </div>
+
         {weeks.map(wn => {
           const { days, total, done, pct, catStats } = weekStats(wn);
           const isCurrentWeek = days.some(ds => ds === todayStr);
+          const tc = tomatoCount(pct);
 
           return (
             <div key={wn} style={{
@@ -203,9 +262,10 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
               )}
 
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <div>
+                <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:2}}>
                   <span style={{fontSize:16,fontWeight:800,color:C.rose}}>{wn}주차</span>
-                  <span style={{fontSize:12,color:C.sub,marginLeft:8}}>
+                  <TomatoRow count={tc}/>
+                  <span style={{fontSize:12,color:C.sub,marginLeft:6}}>
                     {days[0].slice(5).replace("-","/")} ~ {days[days.length-1].slice(5).replace("-","/")}
                   </span>
                 </div>
@@ -274,6 +334,9 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
             </div>
           );
         })}
+
+        {/* 카드 푸터 */}
+        <div style={{textAlign:"center",fontSize:11,color:C.sub,paddingTop:4}}>🍅 짠토의 플래너 · {new Date().toLocaleDateString("ko-KR")} 기준</div>
       </div>
     </div>
   );
