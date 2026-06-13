@@ -22,14 +22,10 @@ function genId()     { return Math.random().toString(36).slice(2,9); }
 function fmtDate(d)  { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function isSame(a,b) { return fmtDate(new Date(a))===fmtDate(new Date(b)); }
 
-// ── 월요일 기준 주차 계산 ─────────────────────────────────────────────────
-// 해당 날짜가 그 달의 몇 번째 "월요일 시작 주"인지 반환
 function getWeekOfMonthMon(ds) {
   const d = new Date(ds);
   const y = d.getFullYear(), m = d.getMonth();
-  // 그 달 1일의 요일 (0=일,1=월,...,6=토) → 월요일 기준 오프셋
   const firstDay = new Date(y, m, 1).getDay();
-  // 월요일 기준: 일요일(0)→6, 월요일(1)→0, ..., 토요일(6)→5
   const firstOffset = (firstDay + 6) % 7;
   const dayOfMonth = d.getDate();
   return Math.ceil((dayOfMonth + firstOffset) / 7);
@@ -122,12 +118,10 @@ function Bar({pct,color}) {
 
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 
-// ── 주간 달성률 뷰 ────────────────────────────────────────────────────────
 function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }) {
   const y = curDate.getFullYear(), m = curDate.getMonth();
   const lastDay = new Date(y, m+1, 0).getDate();
 
-  // 이 달의 모든 날짜를 월요일 기준 주차별로 그룹핑
   const weekMap = {};
   for (let d = 1; d <= lastDay; d++) {
     const ds = fmtDate(new Date(y, m, d));
@@ -137,7 +131,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
   }
   const weeks = Object.keys(weekMap).map(Number).sort((a,b)=>a-b);
 
-  // 특정 날짜의 할일 전체 (루틴 포함)
   function todosOnDate(ds) {
     return activeCats.flatMap(c =>
       (todos[c.id]||[]).filter(t =>
@@ -148,7 +141,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     );
   }
 
-  // 주차별 통계 계산
   function weekStats(wn) {
     const days = weekMap[wn];
     let total = 0, done = 0;
@@ -174,7 +166,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     return { days, total, done, pct, catStats };
   }
 
-  // 일별 달성률
   function dayPct(ds) {
     const items = todosOnDate(ds);
     return items.length ? Math.round(items.filter(t=>t.done).length/items.length*100) : null;
@@ -184,7 +175,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
 
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-      {/* 헤더 */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()-1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>‹</button>
@@ -194,7 +184,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
         <div style={{fontSize:12,color:C.sub,background:C.pink1,padding:"4px 10px",borderRadius:99,fontWeight:700}}>📅 월요일 기준 주차</div>
       </div>
 
-      {/* 주차별 카드 */}
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {weeks.map(wn => {
           const { days, total, done, pct, catStats } = weekStats(wn);
@@ -213,7 +202,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
                 <div style={{position:"absolute",top:-10,left:16,background:C.rose,color:C.white,fontSize:10,fontWeight:800,padding:"2px 10px",borderRadius:99}}>이번 주 ✨</div>
               )}
 
-              {/* 주차 헤더 */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                 <div>
                   <span style={{fontSize:16,fontWeight:800,color:C.rose}}>{wn}주차</span>
@@ -227,13 +215,11 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
                 </div>
               </div>
 
-              {/* 일별 달성률 바 */}
               <div style={{display:"grid",gridTemplateColumns:`repeat(${days.length},1fr)`,gap:4,marginBottom:14}}>
-                {/* 월~일 순서로 정렬 */}
                 {days.slice().sort((a,b)=>a.localeCompare(b)).map(ds => {
                   const dp = dayPct(ds);
                   const isToday = ds === todayStr;
-                  const dow = new Date(ds).getDay(); // 0=일,1=월,...
+                  const dow = new Date(ds).getDay();
                   const dowLabel = DAYS_KO[dow];
                   return (
                     <div key={ds} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
@@ -269,7 +255,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
                 })}
               </div>
 
-              {/* 카테고리별 달성률 */}
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {activeCats.map(cat => {
                   const cs = catStats[cat.id];
@@ -294,7 +279,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
   );
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────
 function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, isMobile}) {
   return (
     <ModalWrap onClose={onClose} zIndex={200} isMobile={isMobile}>
@@ -565,7 +549,6 @@ function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, deleteMemo
   );
 }
 
-// ── 메인 App ──────────────────────────────────────────────────────────────
 export default function App() {
   const [isMobile, setIsMobile] = useState(()=>window.innerWidth<768);
   useState(()=>{ const h=()=>setIsMobile(window.innerWidth<768); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); });
@@ -632,17 +615,30 @@ export default function App() {
   const activeCats=cats.filter(c=>!c.hidden);
   const catById=id=>cats.find(c=>c.id===id);
 
-  // 루틴(date 없음): doneLog[날짜]로 날짜별 완료 상태 관리
   const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
 
-  // allTodosOn: archived 포함 (통계 반영용)
-  const allTodosOn=ds=>activeCats.flatMap(c=>(todos[c.id]||[]).filter(t=>(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)).map(t=>({...t,done:isDone(t,ds)})));
-  // visibleTodosOn: archived 제외 (화면 표시용)
+  // ✅ 수정: archived 항목 제외 (통계 정확도 수정)
+  const allTodosOn=ds=>activeCats.flatMap(c=>
+    (todos[c.id]||[]).filter(t=>
+      !t.archived &&
+      (!t.date||isSame(t.date,ds)) &&
+      (!t.startDate||ds>=t.startDate)
+    ).map(t=>({...t,done:isDone(t,ds)}))
+  );
+
   const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)).map(t=>({...t,done:isDone(t,ds)}));
   const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
-  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; };
 
-  // ── 수정된 weeklyPct: 월요일 기준 주차 + isDone으로 루틴 완료 반영 ──────
+  // ✅ 수정: archived 항목 제외 (퍼센트 계산 버그 수정)
+  const catPctOn=(cid,ds)=>{
+    const i=(todos[cid]||[]).filter(t=>
+      !t.archived &&
+      (!t.date||isSame(t.date,ds)) &&
+      (!t.startDate||ds>=t.startDate)
+    );
+    return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0;
+  };
+
   function weeklyPct(wn, cid) {
     const y=curDate.getFullYear(), m=curDate.getMonth(), last=new Date(y,m+1,0).getDate();
     let done=0, total=0;
@@ -754,7 +750,6 @@ export default function App() {
             {mobileTab==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} deleteMemo={deleteMemo}/>}
           </div>
-          {/* 모바일 하단 탭바 - 주간 추가 */}
           <div style={{display:"flex",borderTop:`1.5px solid ${C.border}`,background:C.white,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
             {[
               {tab:"month",  icon:"🗓️", label:"캘린더"},
@@ -863,7 +858,7 @@ export default function App() {
               <div><div style={{fontSize:18,fontWeight:800,color:C.rose}}>🍅 짠토의 플래너</div><div style={{fontSize:12,color:C.sub}}>{selDate}</div></div>
               <Ring pct={totalPctOn(selDate)} size={66} stroke={7} color={C.rose} bg={C.pink1}/>
             </div>
-            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.date||isSame(t.date,selDate)).map(t=>({...t,done:t.date?t.done:!!(t.doneLog&&t.doneLog[selDate])})); if(!items.length) return null; return (
+            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,selDate))).map(t=>({...t,done:isDone(t,selDate)})); if(!items.length) return null; return (
               <div key={cat.id} style={{background:"rgba(255,255,255,0.7)",borderRadius:12,padding:"10px 14px",marginBottom:8}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>{cat.emoji}</span><span style={{fontSize:13,fontWeight:700}}>{cat.name}</span></div><span style={{fontSize:13,fontWeight:800,color:cat.color}}>{pct}%</span></div>
                 <div style={{height:7,borderRadius:99,background:C.pink1,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
