@@ -128,20 +128,11 @@ function TomatoRow({ count }) {
   );
 }
 
-function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }) {
-  const y = curDate.getFullYear(), m = curDate.getMonth();
-  const lastDay = new Date(y, m+1, 0).getDate();
+function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
   const cardRef = useRef(null);
   const [saving, setSaving] = useState(false);
 
-  const weekMap = {};
-  for (let d = 1; d <= lastDay; d++) {
-    const ds = fmtDate(new Date(y, m, d));
-    const wn = getWeekOfMonthMon(ds);
-    if (!weekMap[wn]) weekMap[wn] = [];
-    weekMap[wn].push(ds);
-  }
-  const weeks = Object.keys(weekMap).map(Number).sort((a,b)=>a-b);
+  const days = weekMap[wn] || [];
 
   function todosOnDate(ds) {
     return activeCats.flatMap(c =>
@@ -153,12 +144,10 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     );
   }
 
-  function weekStats(wn) {
-    const days = weekMap[wn];
+  function weekStats() {
     let total = 0, done = 0;
     const catStats = {};
     activeCats.forEach(c => { catStats[c.id] = { total: 0, done: 0 }; });
-
     days.forEach(ds => {
       activeCats.forEach(cat => {
         const items = (todos[cat.id]||[]).filter(t =>
@@ -174,8 +163,7 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
         });
       });
     });
-    const pct = total ? Math.round(done/total*100) : null;
-    return { days, total, done, pct, catStats };
+    return { total, done, pct: total ? Math.round(done/total*100) : null, catStats };
   }
 
   function dayPct(ds) {
@@ -183,14 +171,20 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     return items.length ? Math.round(items.filter(t=>t.done).length/items.length*100) : null;
   }
 
+  function tomatoCount(pct) {
+    if (pct === 100) return 3;
+    if (pct !== null && pct >= 70) return 2;
+    return 1;
+  }
+
   async function saveImage() {
     if (!cardRef.current || saving) return;
     setSaving(true);
     try {
       await import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
-      const canvas = await window.html2canvas(cardRef.current, { scale: 2, backgroundColor: "#FFF5F7", useCORS: true });
+      const canvas = await window.html2canvas(cardRef.current, { scale: 2, backgroundColor: "#FFF3F1", useCORS: true });
       const a = document.createElement("a");
-      a.download = `짠토_주간달성률_${y}년${MONTHS_KO[m]}.png`;
+      a.download = `짠토_${y}년${MONTHS_KO[m]}_${wn}주차.png`;
       a.href = canvas.toDataURL();
       a.click();
     } catch {
@@ -199,16 +193,124 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
     setSaving(false);
   }
 
-  // 주차별 토마토 개수: 최소 1개 항상 표시
-  function tomatoCount(pct) {
-    if (pct === 100) return 3;
-    if (pct !== null && pct >= 70) return 2;
-    return 1;
+  const { total, done, pct, catStats } = weekStats();
+  const isCurrentWeek = days.some(ds => ds === todayStr);
+  const tc = tomatoCount(pct);
+
+  return (
+    <div style={{position:"relative"}}>
+      {/* 이미지로 저장될 카드 영역 */}
+      <div ref={cardRef} style={{
+        background: isCurrentWeek ? "linear-gradient(135deg,#FFF3F1,#FFE2D8)" : "linear-gradient(160deg,#FFF3F1,#FFE2D8)",
+        borderRadius:20,
+        border: isCurrentWeek ? `2px solid ${C.rose}` : `1.5px solid ${C.border}`,
+        padding: isMobile?"16px":"22px 26px",
+        boxShadow: isCurrentWeek ? `0 4px 20px ${C.rose}22` : `0 2px 8px ${C.pink1}`,
+      }}>
+        {/* 카드 내부 헤더: 🍅 짠토의 플래너 */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,paddingBottom:10,borderBottom:`1.5px dashed ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:24,filter:"drop-shadow(0 2px 3px rgba(200,50,30,.25))"}}>🍅</span>
+            <div>
+              <div style={{fontSize:15,fontWeight:900,color:C.rose,letterSpacing:"-0.3px"}}>짠토의 플래너</div>
+              <div style={{fontSize:12,color:C.sub}}>주간 달성률 리포트</div>
+            </div>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:C.sub,background:C.white,borderRadius:10,padding:"4px 12px",border:`1px solid ${C.border}`}}>{y}년 {MONTHS_KO[m]}</div>
+        </div>
+
+        {/* 주차 제목 + 링 */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:4}}>
+            <span style={{fontSize:20,fontWeight:900,color:C.rose}}>{wn}주차</span>
+            <TomatoRow count={tc}/>
+            <span style={{fontSize:13,color:C.sub,marginLeft:4}}>
+              {days[0]?.slice(5).replace("-","/")} ~ {days[days.length-1]?.slice(5).replace("-","/")}
+            </span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:13,color:C.sub,fontWeight:600}}>{done}/{total} 완료</span>
+            <Ring pct={pct||0} size={58} stroke={6} color={isCurrentWeek?C.rose:C.pink3} bg={C.pink1}/>
+          </div>
+        </div>
+
+        {/* 일별 바 */}
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${days.length},1fr)`,gap:6,marginBottom:16}}>
+          {days.slice().sort((a,b)=>a.localeCompare(b)).map(ds => {
+            const dp = dayPct(ds);
+            const isToday = ds === todayStr;
+            const dow = new Date(ds).getDay();
+            return (
+              <div key={ds} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <span style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?C.rose:[0,6].includes(dow)?C.pink3:C.sub}}>{DAYS_KO[dow]}</span>
+                <div style={{width:"100%",height:isMobile?44:60,borderRadius:8,background:C.pink1,position:"relative",overflow:"hidden",border:isToday?`2px solid ${C.rose}`:"none"}}>
+                  {dp!==null && (
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${dp}%`,
+                      background:isToday?`linear-gradient(180deg,${C.rose},${C.pink3})`:dp===100?"#7EC8A4":`linear-gradient(180deg,${C.pink3},${C.pink2})`,
+                      borderRadius:6,transition:"height .5s"}}/>
+                  )}
+                </div>
+                <span style={{fontSize:11,fontWeight:700,color:isToday?C.rose:dp===100?"#7EC8A4":C.sub}}>{dp===null?"—":dp+"%"}</span>
+                <span style={{fontSize:11,color:C.sub}}>{ds.slice(8)}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 카테고리별 바 */}
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {activeCats.map(cat => {
+            const cs = catStats[cat.id];
+            if (cs.total === 0) return null;
+            const cp = Math.round(cs.done/cs.total*100);
+            return (
+              <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:16,flexShrink:0}}>{cat.emoji}</span>
+                <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:isMobile?38:52,flexShrink:0}}>{cat.name}</span>
+                <Bar pct={cp} color={cat.color}/>
+                <span style={{fontSize:13,fontWeight:800,color:cat.color,minWidth:32,textAlign:"right"}}>{cp}%</span>
+                <span style={{fontSize:11,color:C.sub,minWidth:isMobile?30:38,textAlign:"right"}}>{cs.done}/{cs.total}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 카드 푸터 */}
+        <div style={{marginTop:12,textAlign:"center",fontSize:12,color:C.sub}}>🍅 짠토의 플래너 · {new Date().toLocaleDateString("ko-KR")} 기준</div>
+      </div>
+
+      {/* 저장 버튼 (카드 우하단 오버레이) */}
+      <button onClick={saveImage} disabled={saving} style={{
+        position:"absolute", bottom:14, right:isMobile?14:22,
+        display:"flex",alignItems:"center",gap:5,
+        padding:"6px 14px",borderRadius:20,
+        background:saving?"#ccc":`linear-gradient(135deg,${C.pink3},${C.rose})`,
+        color:C.white,border:"none",fontWeight:800,fontSize:13,
+        cursor:saving?"default":"pointer",
+        boxShadow:`0 2px 8px ${C.rose}55`,
+        opacity:saving?0.7:1,
+      }}>
+        {saving ? "저장 중…" : "📸 저장"}
+      </button>
+    </div>
+  );
+}
+
+function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }) {
+  const y = curDate.getFullYear(), m = curDate.getMonth();
+  const lastDay = new Date(y, m+1, 0).getDate();
+
+  const weekMap = {};
+  for (let d = 1; d <= lastDay; d++) {
+    const ds = fmtDate(new Date(y, m, d));
+    const wn = getWeekOfMonthMon(ds);
+    if (!weekMap[wn]) weekMap[wn] = [];
+    weekMap[wn].push(ds);
   }
+  const weeks = Object.keys(weekMap).map(Number).sort((a,b)=>a-b);
 
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-      {/* 애니메이션 keyframe */}
       <style>{`
         @keyframes tomato-bounce {
           from { transform: translateY(0px) rotate(-5deg); }
@@ -216,131 +318,117 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
         }
       `}</style>
 
+      {/* 헤더 */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()-1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>‹</button>
-          <span style={{fontSize:16,fontWeight:800,color:C.rose}}>{y}년 {MONTHS_KO[m]}</span>
+          <span style={{fontSize:17,fontWeight:800,color:C.rose}}>{y}년 {MONTHS_KO[m]}</span>
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()+1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>›</button>
         </div>
-        <div style={{fontSize:12,color:C.sub,background:C.pink1,padding:"4px 10px",borderRadius:99,fontWeight:700}}>📅 월요일 기준 주차</div>
-        <button onClick={saveImage} disabled={saving} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer",opacity:saving?0.7:1,boxShadow:`0 2px 10px ${C.rose}44`}}>
-          {saving ? "저장 중…" : "📸 이미지 저장"}
-        </button>
+        <div style={{fontSize:13,color:C.sub,background:C.pink1,padding:"4px 10px",borderRadius:99,fontWeight:700}}>📅 월요일 기준 주차</div>
       </div>
 
-      {/* 캡처 영역 */}
-      <div ref={cardRef} style={{display:"flex",flexDirection:"column",gap:14,padding:16,borderRadius:20,background:"linear-gradient(160deg,#FFF5F7,#FFE8EF)"}}>
-
-        {/* 카드 헤더 - 좌상단 🍅 짠토 */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:10,borderBottom:`1.5px dashed ${C.border}`}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:26,filter:"drop-shadow(0 2px 3px rgba(200,50,30,.25))"}}>🍅</span>
-            <div>
-              <div style={{fontSize:16,fontWeight:900,color:C.rose,letterSpacing:"-0.3px"}}>짠토의 플래너</div>
-              <div style={{fontSize:11,color:C.sub}}>주간 달성률 리포트</div>
-            </div>
-          </div>
-          <div style={{fontSize:13,fontWeight:700,color:C.sub,background:C.white,borderRadius:10,padding:"4px 12px",border:`1px solid ${C.border}`}}>{y}년 {MONTHS_KO[m]}</div>
-        </div>
-
-        {weeks.map(wn => {
-          const { days, total, done, pct, catStats } = weekStats(wn);
-          const isCurrentWeek = days.some(ds => ds === todayStr);
-          const tc = tomatoCount(pct);
-
-          return (
-            <div key={wn} style={{
-              background: isCurrentWeek ? "linear-gradient(135deg,#FFF0F3,#FFE4EC)" : C.white,
-              borderRadius:18,
-              border: isCurrentWeek ? `2px solid ${C.rose}` : `1.5px solid ${C.border}`,
-              padding: isMobile?"14px 14px":"18px 22px",
-              boxShadow: isCurrentWeek ? `0 4px 20px ${C.rose}22` : `0 2px 8px ${C.pink1}`,
-              position:"relative",
-            }}>
-              {isCurrentWeek && (
-                <div style={{position:"absolute",top:-10,left:16,background:C.rose,color:C.white,fontSize:10,fontWeight:800,padding:"2px 10px",borderRadius:99}}>이번 주 ✨</div>
-              )}
-
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:2}}>
-                  <span style={{fontSize:16,fontWeight:800,color:C.rose}}>{wn}주차</span>
-                  <TomatoRow count={tc}/>
-                  <span style={{fontSize:12,color:C.sub,marginLeft:6}}>
-                    {days[0].slice(5).replace("-","/")} ~ {days[days.length-1].slice(5).replace("-","/")}
-                  </span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:12,color:C.sub,fontWeight:600}}>{done}/{total} 완료</span>
-                  <Ring pct={pct||0} size={52} stroke={5} color={isCurrentWeek?C.rose:C.pink3} bg={C.pink1}/>
-                </div>
-              </div>
-
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${days.length},1fr)`,gap:4,marginBottom:14}}>
-                {days.slice().sort((a,b)=>a.localeCompare(b)).map(ds => {
-                  const dp = dayPct(ds);
-                  const isToday = ds === todayStr;
-                  const dow = new Date(ds).getDay();
-                  const dowLabel = DAYS_KO[dow];
-                  return (
-                    <div key={ds} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                      <span style={{fontSize:10,fontWeight:isToday?800:600,color:isToday?C.rose:[0,6].includes(dow)?C.pink3:C.sub}}>{dowLabel}</span>
-                      <div style={{
-                        width:"100%",
-                        height: isMobile?40:54,
-                        borderRadius:8,
-                        background: C.pink1,
-                        position:"relative",
-                        overflow:"hidden",
-                        border: isToday?`2px solid ${C.rose}`:"none",
-                      }}>
-                        {dp!==null && (
-                          <div style={{
-                            position:"absolute",
-                            bottom:0,left:0,right:0,
-                            height:`${dp}%`,
-                            background: isToday
-                              ? `linear-gradient(180deg,${C.rose},${C.pink3})`
-                              : dp===100?"#7EC8A4":`linear-gradient(180deg,${C.pink3},${C.pink2})`,
-                            borderRadius:6,
-                            transition:"height .5s",
-                          }}/>
-                        )}
-                      </div>
-                      <span style={{fontSize:dp===null?9:10,fontWeight:700,color:isToday?C.rose:dp===100?"#7EC8A4":C.sub}}>
-                        {dp===null?"—":dp+"%"}
-                      </span>
-                      <span style={{fontSize:9,color:C.sub}}>{ds.slice(8)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {activeCats.map(cat => {
-                  const cs = catStats[cat.id];
-                  if (cs.total === 0) return null;
-                  const cp = Math.round(cs.done/cs.total*100);
-                  return (
-                    <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:14,flexShrink:0}}>{cat.emoji}</span>
-                      <span style={{fontSize:12,fontWeight:700,color:C.text,minWidth:isMobile?36:48,flexShrink:0}}>{cat.name}</span>
-                      <Bar pct={cp} color={cat.color}/>
-                      <span style={{fontSize:12,fontWeight:800,color:cat.color,minWidth:30,textAlign:"right"}}>{cp}%</span>
-                      <span style={{fontSize:10,color:C.sub,minWidth:isMobile?28:36,textAlign:"right"}}>{cs.done}/{cs.total}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* 카드 푸터 */}
-        <div style={{textAlign:"center",fontSize:11,color:C.sub,paddingTop:4}}>🍅 짠토의 플래너 · {new Date().toLocaleDateString("ko-KR")} 기준</div>
+      {/* 주차별 카드 — 각각 독립적으로 저장 가능 */}
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        {weeks.map(wn => (
+          <WeekCard key={wn} wn={wn} weekMap={weekMap} activeCats={activeCats} todos={todos} isDone={isDone} isMobile={isMobile} y={y} m={m}/>
+        ))}
       </div>
     </div>
   );
 }
+
+function ArchiveView({ isMobile, todos, cats, setTodosS }) {
+  const [confirmId, setConfirmId] = useState(null);
+
+  const archivedItems = cats.flatMap(cat =>
+    (todos[cat.id]||[])
+      .filter(t => t.archived)
+      .map(t => ({ ...t, catId: cat.id, catName: cat.name, catEmoji: cat.emoji, catColor: cat.color }))
+  );
+
+  function restore(catId, id) {
+    setTodosS(p => ({ ...p, [catId]: p[catId].map(t => t.id===id ? { ...t, archived:false } : t) }));
+  }
+  function deletePermanently(catId, id) {
+    setTodosS(p => ({ ...p, [catId]: p[catId].filter(t => t.id!==id) }));
+    setConfirmId(null);
+  }
+
+  const byCat = cats.map(cat => ({
+    cat,
+    items: archivedItems.filter(t => t.catId === cat.id),
+  })).filter(g => g.items.length > 0);
+
+  return (
+    <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
+      <div style={{maxWidth:680,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+          <span style={{fontSize:22}}>📦</span>
+          <div>
+            <div style={{fontSize:18,fontWeight:800,color:C.rose}}>루틴 보관함</div>
+            <div style={{fontSize:12,color:C.sub,marginTop:2}}>삭제된 루틴들이 여기 보관돼요. 복원하거나 영구 삭제할 수 있어요.</div>
+          </div>
+        </div>
+
+        <div style={{background:C.pink1,borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:12,color:C.sub,lineHeight:1.7}}>
+          💡 루틴을 삭제하면 과거 달성 기록은 그대로 보존되고 여기에 보관돼요.<br/>
+          🔄 복원하면 다시 할일 목록에 나타나요 · 🗑️ 영구삭제하면 기록도 모두 사라져요.
+        </div>
+
+        {archivedItems.length === 0 && (
+          <div style={{textAlign:"center",padding:"60px 0",color:C.sub}}>
+            <div style={{fontSize:48,marginBottom:12}}>📭</div>
+            <div style={{fontSize:15,fontWeight:700}}>보관된 루틴이 없어요</div>
+            <div style={{fontSize:13,marginTop:6}}>루틴을 삭제하면 여기에 보관돼요 🍅</div>
+          </div>
+        )}
+
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          {byCat.map(({ cat, items }) => (
+            <div key={cat.id} style={{background:C.white,borderRadius:16,border:`1.5px solid ${C.border}`,overflow:"hidden",boxShadow:`0 2px 8px ${C.pink1}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:cat.color+"18",borderBottom:`1px solid ${C.border}`}}>
+                <span style={{fontSize:18}}>{cat.emoji}</span>
+                <span style={{fontSize:15,fontWeight:800,color:C.text}}>{cat.name}</span>
+                <span style={{fontSize:12,color:cat.color,background:cat.color+"22",padding:"2px 9px",borderRadius:99,fontWeight:700}}>{items.length}개</span>
+              </div>
+              <div style={{padding:"8px 0"}}>
+                {items.map(item => (
+                  <div key={item.id}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px dashed ${C.border}`}}>
+                      <span style={{fontSize:13,color:C.sub,flexShrink:0}}>🔁</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:14,color:C.sub,textDecoration:"line-through",fontWeight:500}}>{item.title}</div>
+                        {item.startDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{item.startDate} 부터 시작</div>}
+                        {item.doneLog && Object.keys(item.doneLog).length > 0 && (
+                          <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}일</div>
+                        )}
+                      </div>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>restore(cat.id, item.id)} style={{padding:"5px 12px",borderRadius:10,border:`1.5px solid ${cat.color}`,background:cat.color+"18",color:cat.color,fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 복원</button>
+                        <button onClick={()=>setConfirmId(item.id)} style={{padding:"5px 12px",borderRadius:10,border:"1.5px solid #FFB3B3",background:"#FFF0F0",color:"#E63946",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗑️ 삭제</button>
+                      </div>
+                    </div>
+                    {confirmId === item.id && (
+                      <div style={{margin:"0 16px 10px",padding:"12px 14px",background:"#FFF0F0",borderRadius:10,border:"1.5px solid #FFB3B3"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"#E63946",marginBottom:8}}>⚠️ 영구 삭제하면 완료 기록도 모두 사라져요. 정말 삭제할까요?</div>
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={()=>setConfirmId(null)} style={{flex:1,padding:"7px",borderRadius:8,border:"none",background:C.pink1,color:C.sub,fontWeight:700,cursor:"pointer",fontSize:13}}>취소</button>
+                          <button onClick={()=>deletePermanently(cat.id, item.id)} style={{flex:1,padding:"7px",borderRadius:8,border:"none",background:"#E63946",color:"white",fontWeight:800,cursor:"pointer",fontSize:13}}>영구 삭제</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, isMobile}) {
   return (
@@ -357,12 +445,12 @@ function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, i
           📤 파일 선택해서 불러오기
           <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
         </label>
-        <div style={{marginTop:8,fontSize:11,color:"#555",lineHeight:1.5}}>⚠️ 현재 데이터가 파일 내용으로 <b>덮어씌워져요</b></div>
+        <div style={{marginTop:8,fontSize:11,color:"#555",lineHeight:1.5}}>⚠️ 현재 데이터가 파일 내용으로 덮어씌워져요</div>
       </div>
       {importMsg&&<div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:importMsg.type==="ok"?"#E8F5E9":"#FFEBEE",color:importMsg.type==="ok"?"#2E7D32":"#C62828",fontSize:13,fontWeight:600}}>{importMsg.text}</div>}
       <div style={{marginTop:16,background:"#FFF8FA",borderRadius:12,padding:"12px 14px",border:`1px dashed ${C.border}`}}>
         <div style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6}}>💡 이렇게 쓰세요</div>
-        <div style={{fontSize:11,color:C.sub,lineHeight:1.8}}>1️⃣ 컴퓨터에서 <b>내보내기</b> → 파일 저장<br/>2️⃣ 파일을 카카오톡·이메일로 폰에 전송<br/>3️⃣ 폰에서 <b>가져오기</b> → 파일 선택</div>
+        <div style={{fontSize:11,color:C.sub,lineHeight:1.8}}>1️⃣ 컴퓨터에서 내보내기 → 파일 저장<br/>2️⃣ 파일을 카카오톡·이메일로 폰에 전송<br/>3️⃣ 폰에서 가져오기 → 파일 선택</div>
       </div>
       <button onClick={onClose} style={{width:"100%",marginTop:14,padding:"11px",borderRadius:10,background:C.pink1,color:C.sub,border:"none",fontWeight:700,fontSize:14,cursor:"pointer"}}>닫기</button>
     </ModalWrap>
@@ -376,12 +464,12 @@ function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilt
       <button onClick={()=>setSyncModal(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:700,background:"linear-gradient(135deg,#E8F5E9,#F0FFF8)",color:"#2E7D32",border:"1.5px solid #A5D6A7",width:"100%",textAlign:"left",marginBottom:6}}>
         <span>🔄</span> 기기 간 데이터 동기화<span style={{marginLeft:"auto",fontSize:10,opacity:.7}}>내보내기 / 가져오기</span>
       </button>
-      {!isMobile&&[["month","🗓️","월간 캘린더"],["list","✅","할 일 목록"],["weekly","📊","주간 달성률"],["memo","🗒️","메모"]].map(([v,ic,lb])=>(
-        <button key={v} onClick={()=>setView(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:12,cursor:"pointer",fontSize:14,fontWeight:view===v?700:500,background:view===v?C.pink2:"transparent",color:view===v?C.white:C.sub,border:"none",width:"100%",textAlign:"left"}}>
+      {!isMobile&&[["month","🗓️","월간 캘린더"],["list","✅","할 일 목록"],["weekly","📊","주간 달성률"],["memo","🗒️","메모"],["archive","📦","루틴 보관함"]].map(([v,ic,lb])=>(
+        <button key={v} onClick={()=>setView(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:12,cursor:"pointer",fontSize:14,fontWeight:view===v?700:500,background:view===v?C.rose:"transparent",color:view===v?C.white:C.sub,border:"none",width:"100%",textAlign:"left"}}>
           <span>{ic}</span>{lb}
         </button>
       ))}
-      <div style={{margin:"12px 0 6px",fontSize:11,fontWeight:800,color:C.sub,padding:"0 6px"}}>오늘 일정 🌸</div>
+      <div style={{margin:"12px 0 6px",fontSize:11,fontWeight:800,color:C.sub,padding:"0 6px"}}>오늘 일정 🍅</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
         <button onClick={()=>setSideFilter("all")} style={{padding:"3px 9px",borderRadius:99,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sideFilter==="all"?C.rose:C.pink1,color:sideFilter==="all"?C.white:C.sub}}>전체</button>
         {activeCats.map(cat=><button key={cat.id} onClick={()=>setSideFilter(sideFilter===cat.id?"all":cat.id)} style={{padding:"3px 8px",borderRadius:99,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sideFilter===cat.id?cat.color:C.pink1,color:sideFilter===cat.id?C.white:C.sub}}>{cat.emoji}</button>)}
@@ -425,8 +513,7 @@ function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilt
       {cats.filter(c=>c.hidden).length>0&&(
         <div style={{marginTop:8}}>
           <div style={{fontSize:11,fontWeight:800,color:C.sub,padding:"0 6px 4px"}}>숨긴 분류</div>
-          {cats.filter(c=>c.hidden).map(c=><button key={c.id} onClick={()=>showCat(c.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub,marginBottom:3,width:"100%"}}>{c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span></button>)}
-        </div>
+          {cats.filter(c=>c.hidden).map(c=><button key={c.id} onClick={()=>showCat(c.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub,marginBottom:3,width:"100%"}}>{c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span></button>)}        </div>
       )}
       <div style={{marginTop:"auto",paddingTop:10,fontSize:11,color:C.sub,textAlign:"center"}}>총 {events.length}개 일정 🍓</div>
     </div>
@@ -574,7 +661,53 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
   );
 }
 
-function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, deleteMemo}) {
+function MemoCard({ m, editMemo, deleteMemo }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(m.text);
+
+  function save() {
+    if (!draft.trim()) return;
+    editMemo(m.id, draft.trim());
+    setEditing(false);
+  }
+  function cancel() {
+    setDraft(m.text);
+    setEditing(false);
+  }
+
+  return (
+    <div style={{background:C.white,borderRadius:14,padding:"14px 16px",border:`1.5px solid ${editing?C.rose:C.border}`,boxShadow:`0 2px 8px ${C.pink1}`,transition:"border-color .2s"}}>
+      {editing ? (
+        <>
+          <KoreanTextarea
+            value={draft}
+            onChange={setDraft}
+            onKeyDown={e=>{ if(e.key==="Escape") cancel(); }}
+            rows={4}
+            style={{width:"100%",padding:"8px 10px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",fontFamily:"inherit",background:"#FFF8FA",color:C.text,resize:"none",lineHeight:1.6,boxSizing:"border-box",marginBottom:10}}
+          />
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={cancel} style={{padding:"6px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub,fontSize:13}}>취소</button>
+            <button onClick={save} style={{padding:"6px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,fontSize:13}}>저장</button>
+          </div>
+        </>
+      ) : (
+        <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{m.text}</div>
+            <div style={{fontSize:10,color:C.sub,marginTop:6}}>{new Date(m.createdAt).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+            <button onClick={()=>{ setDraft(m.text); setEditing(true); }} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.sub,opacity:.6,padding:"2px 4px"}}>✏️</button>
+            <button onClick={()=>deleteMemo(m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.sub,opacity:.5,padding:"2px 4px"}}>🗑️</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, deleteMemo}) {
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 24px"}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
@@ -598,13 +731,7 @@ function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, deleteMemo
         )}
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {memos.map(m=>(
-            <div key={m.id} style={{background:C.white,borderRadius:14,padding:"14px 16px",border:`1.5px solid ${C.border}`,boxShadow:`0 2px 8px ${C.pink1}`,display:"flex",gap:12,alignItems:"flex-start"}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{m.text}</div>
-                <div style={{fontSize:10,color:C.sub,marginTop:6}}>{new Date(m.createdAt).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
-              </div>
-              <button onClick={()=>deleteMemo(m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:C.sub,opacity:.5,flexShrink:0,padding:"2px 4px"}}>🗑️</button>
-            </div>
+            <MemoCard key={m.id} m={m} editMemo={editMemo} deleteMemo={deleteMemo}/>
           ))}
         </div>
       </div>
@@ -650,6 +777,7 @@ export default function App() {
     setMemosS(p=>[{id:genId(), text:memoInput.trim(), createdAt:new Date().toISOString()}, ...p]);
     setMemoInput("");
   }
+  function editMemo(id, text) { setMemosS(p=>p.map(m=>m.id===id?{...m,text,updatedAt:new Date().toISOString()}:m)); }
   function deleteMemo(id) { setMemosS(p=>p.filter(m=>m.id!==id)); }
 
   function handleExport() {
@@ -773,7 +901,7 @@ export default function App() {
 
       {!isMobile&&(
         <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-          <aside style={{width:sideOpen?260:0,minWidth:sideOpen?260:0,background:"linear-gradient(160deg,#fff0f3,#ffe4ec)",borderRight:`1.5px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"all .25s",flexShrink:0}}>
+          <aside style={{width:sideOpen?260:0,minWidth:sideOpen?260:0,background:"linear-gradient(160deg,#FFF3F1,#FFE2D8)",borderRight:`1.5px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"all .25s",flexShrink:0}}>
             <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} events={events} openEditEvent={openEditEvent}/>
           </aside>
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -784,7 +912,7 @@ export default function App() {
               <span style={{fontSize:16,fontWeight:800,color:C.rose}}>{curDate.getFullYear()}년 {MONTHS_KO[curDate.getMonth()]}</span>
               <button onClick={()=>{setCurDate(new Date(today.getFullYear(),today.getMonth(),1));setSelDate(todayStr);}} style={{background:C.pink2,border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",color:C.white,fontWeight:700,fontSize:12}}>오늘</button>
               <div style={{flex:1}}/>
-              {[["month","🗓 월간"],["list","✅ 할일"],["weekly","📊 주간"],["memo","🗒️ 메모"]].map(([v,lb])=>(
+              {[["month","🗓 월간"],["list","✅ 할일"],["weekly","📊 주간"],["memo","🗒️ 메모"],["archive","📦 보관함"]].map(([v,lb])=>(
                 <button key={v} onClick={()=>setView(v)} style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${view===v?C.rose:C.border}`,background:view===v?C.rose:C.white,color:view===v?C.white:C.sub,fontSize:12,cursor:"pointer",fontWeight:700}}>{lb}</button>
               ))}
               <button onClick={()=>openAddEvent(selDate)} style={{padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>🍅 추가</button>
@@ -792,7 +920,8 @@ export default function App() {
             {view==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
             {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
             {view==="weekly"&&<WeeklyView {...weeklyProps}/>}
-            {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} deleteMemo={deleteMemo}/>}
+            {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
+            {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
           </div>
         </div>
       )}
@@ -811,7 +940,8 @@ export default function App() {
             {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="weekly"&&<WeeklyView {...weeklyProps}/>}
-            {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} deleteMemo={deleteMemo}/>}
+            {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
+            {mobileTab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
           </div>
           <div style={{display:"flex",borderTop:`1.5px solid ${C.border}`,background:C.white,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
             {[
@@ -820,6 +950,7 @@ export default function App() {
               {tab:"list",   icon:"✅",  label:"할일"},
               {tab:"weekly", icon:"📊",  label:"주간"},
               {tab:"memo",   icon:"🗒️", label:"메모"},
+              {tab:"archive",icon:"📦",  label:"보관함"},
               {tab:"sync",   icon:"🔄",  label:"동기화"},
             ].map(({tab,icon,label})=>(
               <button key={tab} onClick={()=>tab==="sync"?setSyncModal(true):setMobileTab(tab)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0",border:"none",background:"transparent",cursor:"pointer",color:mobileTab===tab?C.rose:C.sub,gap:1}}>
