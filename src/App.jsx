@@ -1162,10 +1162,19 @@ export default function App() {
               {todoForm.repeatType==="weekly"&&(
                 <div style={{marginBottom:12}}>
                   <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>요일 선택 (여러 개 가능)</label>
-                  <div style={{display:"flex",gap:5}}>
+                  <div style={{display:"flex",gap:5,marginBottom:8}}>
                     {DAYS_KO.map((d,i)=>{ const sel=(todoForm.weekDays||[]).includes(i); return (
                       <button key={i} onClick={()=>setTodoForm(p=>{ const cur=p.weekDays||[]; return {...p, weekDays: cur.includes(i)?cur.filter(x=>x!==i):[...cur,i].sort()}; })} style={{flex:1,padding:"8px 0",borderRadius:10,border:`2px solid ${sel?C.rose:C.border}`,background:sel?C.rose:C.white,color:sel?C.white:[0,6].includes(i)?C.pink3:C.sub,fontWeight:800,fontSize:13,cursor:"pointer"}}>{d}</button>
                     );})}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[["평일",[1,2,3,4,5]],["주말",[0,6]]].map(([lb,vals])=>{
+                      const cur=todoForm.weekDays||[];
+                      const isActive = vals.length===cur.length && vals.every(v=>cur.includes(v));
+                      return (
+                        <button key={lb} onClick={()=>setTodoForm(p=>({...p, weekDays: isActive ? [] : [...vals].sort()}))} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1.5px solid ${isActive?C.rose:C.border}`,background:isActive?C.rose+"18":"#FFF8FA",color:isActive?C.rose:C.sub,fontWeight:700,fontSize:11,cursor:"pointer"}}>{lb}</button>
+                      );
+                    })}
                   </div>
                   {weekDaysInvalid&&<div style={{fontSize:10,color:C.tomato,marginTop:5}}>⚠️ 요일을 하나 이상 선택해주세요</div>}
                 </div>
