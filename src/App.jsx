@@ -52,6 +52,46 @@ const INIT_TODOS = {
 function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fb; }catch{ return fb; } }
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
+// ---- 반복 루틴 판정 헬퍼 ----
+function isRoutine(item) {
+  return !item.date;
+}
+function routineAppliesOn(item, ds) {
+  if (item.startDate && ds < item.startDate) return false;
+  const type = item.repeatType || "daily";
+  if (type === "daily") return true;
+  if (type === "weekly") {
+    const dow = new Date(ds).getDay();
+    return Array.isArray(item.weekDays) && item.weekDays.includes(dow);
+  }
+  if (type === "monthly") {
+    const dom = new Date(ds).getDate();
+    return item.monthDay === dom;
+  }
+  return true;
+}
+function itemAppliesOn(item, ds) {
+  if (item.date) return isSame(item.date, ds);
+  return routineAppliesOn(item, ds);
+}
+function repeatLabel(item) {
+  if (!isRoutine(item)) return null;
+  const type = item.repeatType || "daily";
+  if (type === "daily") return "매일";
+  if (type === "weekly") {
+    const names = (item.weekDays||[]).slice().sort().map(d=>DAYS_KO[d]);
+    return names.length ? `매주 ${names.join("·")}` : "매주";
+  }
+  if (type === "monthly") return `매월 ${item.monthDay||1}일`;
+  return "반복";
+}
+function repeatIcon(item) {
+  const type = item.repeatType || "daily";
+  if (type === "weekly") return "📅";
+  if (type === "monthly") return "🗓️";
+  return "🔁";
+}
+
 function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text" }) {
   const composing = useRef(false);
   return (
@@ -137,9 +177,7 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
   function todosOnDate(ds) {
     return activeCats.flatMap(c =>
       (todos[c.id]||[]).filter(t =>
-        !t.archived &&
-        (!t.date || isSame(t.date, ds)) &&
-        (!t.startDate || ds >= t.startDate)
+        !t.archived && itemAppliesOn(t, ds)
       ).map(t => ({ ...t, catId: c.id, done: isDone(t, ds) }))
     );
   }
@@ -151,9 +189,7 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
     days.forEach(ds => {
       activeCats.forEach(cat => {
         const items = (todos[cat.id]||[]).filter(t =>
-          !t.archived &&
-          (!t.date || isSame(t.date, ds)) &&
-          (!t.startDate || ds >= t.startDate)
+          !t.archived && itemAppliesOn(t, ds)
         );
         items.forEach(t => {
           const d = isDone(t, ds);
@@ -199,7 +235,6 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
 
   return (
     <div style={{position:"relative"}}>
-      {/* 이미지로 저장될 카드 영역 */}
       <div ref={cardRef} style={{
         background: isCurrentWeek ? "linear-gradient(135deg,#FFF3F1,#FFE2D8)" : "linear-gradient(160deg,#FFF3F1,#FFE2D8)",
         borderRadius:20,
@@ -207,7 +242,6 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
         padding: isMobile?"16px":"22px 26px",
         boxShadow: isCurrentWeek ? `0 4px 20px ${C.rose}22` : `0 2px 8px ${C.pink1}`,
       }}>
-        {/* 카드 내부 헤더: 🍅 짠토의 플래너 */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,paddingBottom:10,borderBottom:`1.5px dashed ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:24,filter:"drop-shadow(0 2px 3px rgba(200,50,30,.25))"}}>🍅</span>
@@ -219,7 +253,6 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
           <div style={{fontSize:13,fontWeight:700,color:C.sub,background:C.white,borderRadius:10,padding:"4px 12px",border:`1px solid ${C.border}`}}>{y}년 {MONTHS_KO[m]}</div>
         </div>
 
-        {/* 주차 제목 + 링 */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:4}}>
             <span style={{fontSize:20,fontWeight:900,color:C.rose}}>{wn}주차</span>
@@ -234,7 +267,6 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
           </div>
         </div>
 
-        {/* 일별 바 */}
         <div style={{display:"grid",gridTemplateColumns:`repeat(${days.length},1fr)`,gap:6,marginBottom:16}}>
           {days.slice().sort((a,b)=>a.localeCompare(b)).map(ds => {
             const dp = dayPct(ds);
@@ -257,7 +289,6 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
           })}
         </div>
 
-        {/* 카테고리별 바 */}
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {activeCats.map(cat => {
             const cs = catStats[cat.id];
@@ -275,11 +306,9 @@ function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
           })}
         </div>
 
-        {/* 카드 푸터 */}
         <div style={{marginTop:12,textAlign:"center",fontSize:12,color:C.sub}}>🍅 짠토의 플래너 · {new Date().toLocaleDateString("ko-KR")} 기준</div>
       </div>
 
-      {/* 저장 버튼 (카드 우하단 오버레이) */}
       <button onClick={saveImage} disabled={saving} style={{
         position:"absolute", bottom:14, right:isMobile?14:22,
         display:"flex",alignItems:"center",gap:5,
@@ -318,7 +347,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
         }
       `}</style>
 
-      {/* 헤더 */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button onClick={()=>{const d=new Date(curDate);d.setMonth(d.getMonth()-1);setCurDate(d);}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:700}}>‹</button>
@@ -328,7 +356,6 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
         <div style={{fontSize:13,color:C.sub,background:C.pink1,padding:"4px 10px",borderRadius:99,fontWeight:700}}>📅 월요일 기준 주차</div>
       </div>
 
-      {/* 주차별 카드 — 각각 독립적으로 저장 가능 */}
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         {weeks.map(wn => (
           <WeekCard key={wn} wn={wn} weekMap={weekMap} activeCats={activeCats} todos={todos} isDone={isDone} isMobile={isMobile} y={y} m={m}/>
@@ -396,10 +423,10 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
                 {items.map(item => (
                   <div key={item.id}>
                     <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px dashed ${C.border}`}}>
-                      <span style={{fontSize:13,color:C.sub,flexShrink:0}}>🔁</span>
+                      <span style={{fontSize:13,color:C.sub,flexShrink:0}}>{repeatIcon(item)}</span>
                       <div style={{flex:1}}>
                         <div style={{fontSize:14,color:C.sub,textDecoration:"line-through",fontWeight:500}}>{item.title}</div>
-                        {item.startDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{item.startDate} 부터 시작</div>}
+                        {item.startDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
                         {item.doneLog && Object.keys(item.doneLog).length > 0 && (
                           <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}일</div>
                         )}
@@ -429,12 +456,62 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
   );
 }
 
+function CloudSyncModal({onClose, isMobile, cloudCode, setCloudCode, cloudStatus, doCloudPush, doCloudPull, autoSync, setAutoSync}) {
+  const [draft, setDraft] = useState(cloudCode || "");
+  return (
+    <ModalWrap onClose={onClose} zIndex={250} isMobile={isMobile}>
+      <div style={{fontSize:16,fontWeight:800,color:C.rose,marginBottom:6}}>☁️ 핸드폰 ↔ 컴퓨터 동기화</div>
+      <div style={{fontSize:12,color:C.sub,marginBottom:18,lineHeight:1.7}}>코드를 정하면 그 코드로 데이터가 클라우드에 저장돼요.<br/>다른 기기에서 같은 코드를 입력하면 자동으로 같은 데이터를 보게 돼요.</div>
 
-function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, isMobile}) {
+      <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>동기화 코드 (영문/숫자, 예: jjanto2024)</label>
+      <KoreanInput style={inp} placeholder="우리 둘만 아는 코드" value={draft} onChange={setDraft} autoFocus/>
+
+      {cloudStatus && (
+        <div style={{marginBottom:14,padding:"10px 14px",borderRadius:10,background:cloudStatus.type==="ok"?"#E8F5E9":cloudStatus.type==="err"?"#FFEBEE":"#FFF8E1",color:cloudStatus.type==="ok"?"#2E7D32":cloudStatus.type==="err"?"#C62828":"#8D6E00",fontSize:13,fontWeight:600}}>{cloudStatus.text}</div>
+      )}
+
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <button onClick={()=>doCloudPush(draft)} style={{flex:1,padding:"11px",borderRadius:10,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>☁️ 이 기기 데이터 올리기</button>
+        <button onClick={()=>doCloudPull(draft)} style={{flex:1,padding:"11px",borderRadius:10,background:"#7EC8A4",color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>⬇️ 클라우드에서 가져오기</button>
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`,marginBottom:14}}>
+        <span>🔄</span>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700}}>자동 동기화</div>
+          <div style={{fontSize:10,color:C.sub}}>변경할 때마다 자동으로 클라우드에 저장해요</div>
+        </div>
+        <div onClick={()=>{ if(!draft.trim()){ return; } setAutoSync(draft.trim()); }} style={{width:42,height:24,borderRadius:99,background:autoSync?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
+          <div style={{position:"absolute",top:3,left:autoSync?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
+        </div>
+      </div>
+
+      <div style={{background:"#FFF8FA",borderRadius:12,padding:"12px 14px",border:`1px dashed ${C.border}`,marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6}}>💡 이렇게 쓰세요</div>
+        <div style={{fontSize:11,color:C.sub,lineHeight:1.8}}>
+          1️⃣ 컴퓨터에서 코드 정하고 "올리기"<br/>
+          2️⃣ 핸드폰에서 같은 코드 입력 후 "가져오기"<br/>
+          3️⃣ 자동 동기화 켜두면 양쪽에서 계속 최신 상태 유지<br/>
+          ⚠️ 같은 코드를 아는 사람은 누구나 데이터를 볼 수 있어요. 너무 흔한 단어는 피해주세요!
+        </div>
+      </div>
+
+      <button onClick={onClose} style={{width:"100%",padding:"11px",borderRadius:10,background:C.pink1,color:C.sub,border:"none",fontWeight:700,fontSize:14,cursor:"pointer"}}>닫기</button>
+    </ModalWrap>
+  );
+}
+
+function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, isMobile, onOpenCloud}) {
   return (
     <ModalWrap onClose={onClose} zIndex={200} isMobile={isMobile}>
       <div style={{fontSize:16,fontWeight:800,color:C.rose,marginBottom:6}}>🔄 기기 간 데이터 동기화</div>
-      <div style={{fontSize:12,color:C.sub,marginBottom:20,lineHeight:1.7}}>JSON 파일로 데이터를 주고받아요.<br/>컴퓨터 ↔ 핸드폰 어디서든 쓸 수 있어요!</div>
+      <div style={{fontSize:12,color:C.sub,marginBottom:20,lineHeight:1.7}}>코드 하나로 핸드폰·컴퓨터를 자동으로 연결하거나,<br/>JSON 파일을 직접 주고받을 수 있어요.</div>
+
+      <div style={{background:"linear-gradient(135deg,#FFF0F5,#FFE2EC)",borderRadius:14,padding:"16px",marginBottom:14,border:`1.5px solid ${C.rose}55`}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:24}}>☁️</span><div><div style={{fontSize:14,fontWeight:800,color:C.text}}>코드로 자동 동기화 (추천)</div><div style={{fontSize:11,color:C.sub}}>핸드폰 ↔ 컴퓨터, 코드 하나면 끝</div></div></div>
+        <button onClick={onOpenCloud} style={{width:"100%",padding:"11px",borderRadius:10,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:14,cursor:"pointer"}}>☁️ 코드 동기화 열기</button>
+      </div>
+
       <div style={{background:"#FFF0F5",borderRadius:14,padding:"16px",marginBottom:12,border:`1.5px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:24}}>💾</span><div><div style={{fontSize:14,fontWeight:800,color:C.text}}>내보내기</div><div style={{fontSize:11,color:C.sub}}>이 기기의 데이터를 파일로 저장해요</div></div></div>
         <button onClick={handleExport} style={{width:"100%",padding:"11px",borderRadius:10,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:14,cursor:"pointer"}}>📥 파일로 저장하기</button>
@@ -448,21 +525,17 @@ function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, i
         <div style={{marginTop:8,fontSize:11,color:"#555",lineHeight:1.5}}>⚠️ 현재 데이터가 파일 내용으로 덮어씌워져요</div>
       </div>
       {importMsg&&<div style={{marginTop:12,padding:"10px 14px",borderRadius:10,background:importMsg.type==="ok"?"#E8F5E9":"#FFEBEE",color:importMsg.type==="ok"?"#2E7D32":"#C62828",fontSize:13,fontWeight:600}}>{importMsg.text}</div>}
-      <div style={{marginTop:16,background:"#FFF8FA",borderRadius:12,padding:"12px 14px",border:`1px dashed ${C.border}`}}>
-        <div style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6}}>💡 이렇게 쓰세요</div>
-        <div style={{fontSize:11,color:C.sub,lineHeight:1.8}}>1️⃣ 컴퓨터에서 내보내기 → 파일 저장<br/>2️⃣ 파일을 카카오톡·이메일로 폰에 전송<br/>3️⃣ 폰에서 가져오기 → 파일 선택</div>
-      </div>
       <button onClick={onClose} style={{width:"100%",marginTop:14,padding:"11px",borderRadius:10,background:C.pink1,color:C.sub,border:"none",fontWeight:700,fontSize:14,cursor:"pointer"}}>닫기</button>
     </ModalWrap>
   );
 }
 
-function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, events, openEditEvent}) {
+function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, events, openEditEvent, cloudCode, autoSync}) {
   return (
     <div style={{padding:"18px 14px",display:"flex",flexDirection:"column",gap:2,overflow:"auto",flex:1}}>
       {!isMobile&&<div style={{fontSize:19,fontWeight:800,color:C.rose,padding:"2px 6px 10px",display:"flex",alignItems:"center",gap:8}}>🍅 짠토의 플래너</div>}
       <button onClick={()=>setSyncModal(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:700,background:"linear-gradient(135deg,#E8F5E9,#F0FFF8)",color:"#2E7D32",border:"1.5px solid #A5D6A7",width:"100%",textAlign:"left",marginBottom:6}}>
-        <span>🔄</span> 기기 간 데이터 동기화<span style={{marginLeft:"auto",fontSize:10,opacity:.7}}>내보내기 / 가져오기</span>
+        <span>{autoSync&&cloudCode?"☁️":"🔄"}</span> {autoSync&&cloudCode?"자동 동기화 중":"기기 간 데이터 동기화"}<span style={{marginLeft:"auto",fontSize:10,opacity:.7}}>{autoSync&&cloudCode?cloudCode:"내보내기 / 가져오기"}</span>
       </button>
       {!isMobile&&[["month","🗓️","월간 캘린더"],["list","✅","할 일 목록"],["weekly","📊","주간 달성률"],["memo","🗒️","메모"],["archive","📦","루틴 보관함"]].map(([v,ic,lb])=>(
         <button key={v} onClick={()=>setView(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:12,cursor:"pointer",fontSize:14,fontWeight:view===v?700:500,background:view===v?C.rose:"transparent",color:view===v?C.white:C.sub,border:"none",width:"100%",textAlign:"left"}}>
@@ -605,7 +678,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:18,height:18,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
                     <span style={{flex:1,fontSize:13,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none",fontWeight:item.done?400:600}}>
-                      {!item.date&&<span style={{fontSize:10,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>🔁</span>}{item.title}
+                      {!item.date&&<span style={{fontSize:10,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>{repeatIcon(item)} {repeatLabel(item)}</span>}{item.title}
                     </span>
                     <button onClick={()=>openEditTodo(cat.id,item)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,padding:0,opacity:.6}}>✏️</button>
                   </div>
@@ -651,7 +724,9 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
           {items.map(item=>(
             <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${C.border}`}}>
               <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:20,height:20,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
-              <span style={{flex:1,fontSize:14,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none"}}>{item.title}</span>
+              <span style={{flex:1,fontSize:14,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none"}}>
+                {!item.date&&<span style={{fontSize:9,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>{repeatIcon(item)} {repeatLabel(item)}</span>}{item.title}
+              </span>
             </div>
           ))}
         </div>
@@ -755,6 +830,7 @@ export default function App() {
   const [sideFilter,setSideFilter]=useState("all");
   const [shareCard, setShareCard] =useState(false);
   const [syncModal, setSyncModal] =useState(false);
+  const [cloudModal,setCloudModal]=useState(false);
   const [importMsg, setImportMsg] =useState(null);
   const [memos,     setMemos]     =useState(()=>load("jjanto_memos",[]));
   const [memoInput, setMemoInput] =useState("");
@@ -763,14 +839,73 @@ export default function App() {
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
   const [todoModal, setTodoModal] =useState(null);
-  const [todoForm,  setTodoForm]  =useState({title:"",date:"",startDate:todayStr});
+  const [todoForm,  setTodoForm]  =useState({title:"",date:"",startDate:todayStr,repeatType:"daily",weekDays:[],monthDay:1});
   const [catModal,  setCatModal]  =useState(null);
   const [catForm,   setCatForm]   =useState({name:"",emoji:"⭐",color:C.pink3});
 
-  const setEventsS=v=>{ const n=typeof v==="function"?v(events):v; setEvents(n); save("jjanto_events",n); };
-  const setTodosS =v=>{ const n=typeof v==="function"?v(todos):v;  setTodos(n);  save("jjanto_todos",n);  };
-  const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   };
-  const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  };
+  // ---- 클라우드 동기화 상태 ----
+  const [cloudCode, setCloudCode]   = useState(()=>load("jjanto_cloud_code",""));
+  const [autoSync,  setAutoSyncRaw] = useState(()=>load("jjanto_autosync",false));
+  const [cloudStatus,setCloudStatus]= useState(null);
+  const syncTimer = useRef(null);
+  const autoSyncRef = useRef(autoSync);
+  const cloudCodeRef = useRef(cloudCode);
+  autoSyncRef.current = autoSync;
+  cloudCodeRef.current = cloudCode;
+
+  function scheduleAutoSync() {
+    if (!autoSyncRef.current || !cloudCodeRef.current || !window.storage) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(()=>{ doCloudPush(cloudCodeRef.current, true); }, 1200);
+  }
+
+  const setEventsS=v=>{ const n=typeof v==="function"?v(events):v; setEvents(n); save("jjanto_events",n); scheduleAutoSync(); };
+  const setTodosS =v=>{ const n=typeof v==="function"?v(todos):v;  setTodos(n);  save("jjanto_todos",n);  scheduleAutoSync(); };
+  const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   scheduleAutoSync(); };
+  const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  scheduleAutoSync(); };
+
+  async function doCloudPush(code, silent) {
+    const c = (code||"").trim();
+    if (!c) { if(!silent) setCloudStatus({type:"err",text:"❌ 코드를 입력해주세요"}); return; }
+    if (!window.storage) { if(!silent) setCloudStatus({type:"err",text:"❌ 이 환경에서는 클라우드 저장을 쓸 수 없어요"}); return; }
+    try {
+      const payload = { events, todos, cats, memos, updatedAt: new Date().toISOString() };
+      const res = await window.storage.set(`jjanto:${c}`, JSON.stringify(payload), true);
+      if (!res) throw new Error("저장 실패");
+      setCloudCode(c); save("jjanto_cloud_code", c);
+      if (!silent) setCloudStatus({type:"ok",text:`✅ 클라우드에 저장했어요 (${new Date().toLocaleTimeString("ko-KR")})`});
+    } catch(err) {
+      if (!silent) setCloudStatus({type:"err",text:"❌ 저장 실패: "+err.message});
+    }
+  }
+
+  async function doCloudPull(code) {
+    const c = (code||"").trim();
+    if (!c) { setCloudStatus({type:"err",text:"❌ 코드를 입력해주세요"}); return; }
+    if (!window.storage) { setCloudStatus({type:"err",text:"❌ 이 환경에서는 클라우드 저장을 쓸 수 없어요"}); return; }
+    try {
+      const res = await window.storage.get(`jjanto:${c}`, true);
+      if (!res || !res.value) { setCloudStatus({type:"warn",text:"⚠️ 아직 이 코드로 저장된 데이터가 없어요. 먼저 '올리기'를 눌러주세요."}); return; }
+      const data = JSON.parse(res.value);
+      if (data.events) { setEvents(data.events); save("jjanto_events",data.events); }
+      if (data.todos)  { setTodos(data.todos);   save("jjanto_todos",data.todos); }
+      if (data.cats)   { setCats(data.cats);     save("jjanto_cats",data.cats); }
+      if (data.memos)  { setMemos(data.memos);   save("jjanto_memos",data.memos); }
+      setCloudCode(c); save("jjanto_cloud_code", c);
+      setCloudStatus({type:"ok",text:`✅ 불러왔어요! (${data.updatedAt ? new Date(data.updatedAt).toLocaleString("ko-KR") : ""} 저장본)`});
+    } catch(err) {
+      setCloudStatus({type:"err",text:"❌ 불러오기 실패: "+err.message});
+    }
+  }
+
+  function handleAutoSyncToggle(code) {
+    const c = (code||"").trim();
+    if (!c) return;
+    const next = !(autoSync && cloudCode === c);
+    setAutoSyncRaw(next); save("jjanto_autosync", next);
+    setCloudCode(c); save("jjanto_cloud_code", c);
+    if (next) doCloudPush(c, true);
+  }
 
   function addMemo() {
     if(!memoInput.trim()) return;
@@ -808,24 +943,18 @@ export default function App() {
 
   const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
 
-  // ✅ 수정: archived 항목 제외 (통계 정확도 수정)
   const allTodosOn=ds=>activeCats.flatMap(c=>
     (todos[c.id]||[]).filter(t=>
-      !t.archived &&
-      (!t.date||isSame(t.date,ds)) &&
-      (!t.startDate||ds>=t.startDate)
+      !t.archived && itemAppliesOn(t, ds)
     ).map(t=>({...t,done:isDone(t,ds)}))
   );
 
-  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,ds))&&(!t.startDate||ds>=t.startDate)).map(t=>({...t,done:isDone(t,ds)}));
+  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&itemAppliesOn(t, ds)).map(t=>({...t,done:isDone(t,ds)}));
   const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
 
-  // ✅ 수정: archived 항목 제외 (퍼센트 계산 버그 수정)
   const catPctOn=(cid,ds)=>{
     const i=(todos[cid]||[]).filter(t=>
-      !t.archived &&
-      (!t.date||isSame(t.date,ds)) &&
-      (!t.startDate||ds>=t.startDate)
+      !t.archived && itemAppliesOn(t, ds)
     );
     return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0;
   };
@@ -839,9 +968,7 @@ export default function App() {
       const catList = cid ? [cid] : activeCats.map(c=>c.id);
       catList.forEach(cId => {
         const items = (todos[cId]||[]).filter(t =>
-          !t.archived &&
-          (!t.date || isSame(t.date, ds)) &&
-          (!t.startDate || ds >= t.startDate)
+          !t.archived && itemAppliesOn(t, ds)
         );
         items.forEach(t => {
           total++;
@@ -864,9 +991,19 @@ export default function App() {
   function openEditEvent(e){ setForm({...e}); setModal("editEvent"); }
   function saveEvent(){ if(!form.title.trim()) return; const cat=catById(form.catId); const c={...form,color:cat?.color||form.color}; if(modal==="addEvent") setEventsS(p=>[...p,{...c,id:genId()}]); else setEventsS(p=>p.map(e=>e.id===form.id?{...c}:e)); setModal(null); }
   function deleteEvent(id){ setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
-  function openAddTodo(cid){ setTodoForm({title:"",date:"",startDate:todayStr}); setTodoModal({mode:"add",catId:cid}); }
-  function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr}); setTodoModal({mode:"edit",catId:cid,item}); }
-  function saveTodo(){ if(!todoForm.title.trim()) return; const {mode,catId,item}=todoModal; if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),title:todoForm.title,date:todoForm.date,startDate:todoForm.date?undefined:todoForm.startDate,done:false}]})); else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,title:todoForm.title,date:todoForm.date,startDate:todoForm.date?undefined:todoForm.startDate}:t)})); setTodoModal(null); }
+  function openAddTodo(cid){ setTodoForm({title:"",date:"",startDate:todayStr,repeatType:"daily",weekDays:[],monthDay:1}); setTodoModal({mode:"add",catId:cid}); }
+  function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr,repeatType:item.repeatType||"daily",weekDays:item.weekDays||[],monthDay:item.monthDay||1}); setTodoModal({mode:"edit",catId:cid,item}); }
+  function saveTodo(){
+    if(!todoForm.title.trim()) return;
+    const {mode,catId,item}=todoModal;
+    const isFixedDate = !!todoForm.date;
+    const base = isFixedDate
+      ? { title: todoForm.title, date: todoForm.date, startDate: undefined, repeatType: undefined, weekDays: undefined, monthDay: undefined }
+      : { title: todoForm.title, date: "", startDate: todoForm.startDate, repeatType: todoForm.repeatType||"daily", weekDays: todoForm.repeatType==="weekly" ? (todoForm.weekDays||[]) : undefined, monthDay: todoForm.repeatType==="monthly" ? (todoForm.monthDay||1) : undefined };
+    if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),{id:genId(),...base,done:false}]}));
+    else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?{...t,...base}:t)}));
+    setTodoModal(null);
+  }
   function deleteTodo(cid,id){
     const item=(todos[cid]||[]).find(t=>t.id===id);
     if(item && !item.date) {
@@ -896,13 +1033,15 @@ export default function App() {
   const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, setSyncModal, eventsOn, catById };
   const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone };
 
+  const weekDaysInvalid = !todoForm.date && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
+
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Nunito','Apple SD Gothic Neo',sans-serif",background:C.bg,color:C.text,overflow:"hidden",flexDirection:"column"}}>
 
       {!isMobile&&(
         <div style={{display:"flex",flex:1,overflow:"hidden"}}>
           <aside style={{width:sideOpen?260:0,minWidth:sideOpen?260:0,background:"linear-gradient(160deg,#FFF3F1,#FFE2D8)",borderRight:`1.5px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"all .25s",flexShrink:0}}>
-            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} events={events} openEditEvent={openEditEvent}/>
+            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} events={events} openEditEvent={openEditEvent} cloudCode={cloudCode} autoSync={autoSync}/>
           </aside>
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderBottom:`1.5px solid ${C.border}`,background:C.white,flexWrap:"wrap"}}>
@@ -951,7 +1090,7 @@ export default function App() {
               {tab:"weekly", icon:"📊",  label:"주간"},
               {tab:"memo",   icon:"🗒️", label:"메모"},
               {tab:"archive",icon:"📦",  label:"보관함"},
-              {tab:"sync",   icon:"🔄",  label:"동기화"},
+              {tab:"sync",   icon:autoSync&&cloudCode?"☁️":"🔄",  label:"동기화"},
             ].map(({tab,icon,label})=>(
               <button key={tab} onClick={()=>tab==="sync"?setSyncModal(true):setMobileTab(tab)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0",border:"none",background:"transparent",cursor:"pointer",color:mobileTab===tab?C.rose:C.sub,gap:1}}>
                 <span style={{fontSize:tab==="sync"?16:18}}>{icon}</span>
@@ -965,7 +1104,9 @@ export default function App() {
 
       {!isMobile&&<button onClick={()=>openAddEvent(selDate)} style={{position:"fixed",bottom:24,right:24,width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px ${C.rose}66`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:50}}>🍅</button>}
 
-      {syncModal&&<SyncModal onClose={()=>{setSyncModal(false);setImportMsg(null);}} handleExport={handleExport} handleImport={handleImport} importRef={importRef} importMsg={importMsg} isMobile={isMobile}/>}
+      {syncModal&&<SyncModal onClose={()=>{setSyncModal(false);setImportMsg(null);}} handleExport={handleExport} handleImport={handleImport} importRef={importRef} importMsg={importMsg} isMobile={isMobile} onOpenCloud={()=>{setSyncModal(false);setCloudStatus(null);setCloudModal(true);}}/>}
+
+      {cloudModal&&<CloudSyncModal onClose={()=>setCloudModal(false)} isMobile={isMobile} cloudCode={cloudCode} setCloudCode={setCloudCode} cloudStatus={cloudStatus} doCloudPush={doCloudPush} doCloudPull={doCloudPull} autoSync={autoSync&&!!cloudCode} setAutoSync={handleAutoSyncToggle}/>}
 
       {(modal==="addEvent"||modal==="editEvent")&&(
         <ModalWrap onClose={()=>setModal(null)} isMobile={isMobile}>
@@ -1006,23 +1147,52 @@ export default function App() {
           <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16}}>🌸 할 일 {todoModal.mode==="add"?"추가":"편집"}</div>
           <KoreanInput key={todoModal?.item?.id||"new-todo"} style={inp} placeholder="할 일 내용" value={todoForm.title||""} onChange={v=>setTodoForm(p=>({...p,title:v}))} autoFocus/>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
-            <span>🔁</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>매일 반복 (루틴)</div><div style={{fontSize:10,color:C.sub}}>날짜 없이 등록하면 매일 보여요</div></div>
+            <span>🔁</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>반복 루틴</div><div style={{fontSize:10,color:C.sub}}>날짜 없이 등록하면 반복 주기로 보여요</div></div>
             <div onClick={()=>setTodoForm(p=>({...p,date:p.date?"":selDate}))} style={{width:42,height:24,borderRadius:99,background:!todoForm.date?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
               <div style={{position:"absolute",top:3,left:!todoForm.date?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
             </div>
           </div>
           {todoForm.date&&<input type="date" style={inp} value={todoForm.date} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>}
           {!todoForm.date&&(
-            <div style={{marginBottom:12}}>
+            <>
+              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>반복 주기</label>
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                {[["daily","매일","☀️"],["weekly","매주","📅"],["monthly","매월","🗓️"]].map(([val,lb,ic])=>(
+                  <button key={val} onClick={()=>setTodoForm(p=>({...p,repeatType:val}))} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"8px 0",borderRadius:10,border:`2px solid ${todoForm.repeatType===val?C.rose:C.border}`,background:todoForm.repeatType===val?C.rose+"18":C.white,color:todoForm.repeatType===val?C.rose:C.sub,fontWeight:700,fontSize:12,cursor:"pointer"}}>{ic} {lb}</button>
+                ))}
+              </div>
+
+              {todoForm.repeatType==="weekly"&&(
+                <div style={{marginBottom:12}}>
+                  <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>요일 선택 (여러 개 가능)</label>
+                  <div style={{display:"flex",gap:5}}>
+                    {DAYS_KO.map((d,i)=>{ const sel=(todoForm.weekDays||[]).includes(i); return (
+                      <button key={i} onClick={()=>setTodoForm(p=>{ const cur=p.weekDays||[]; return {...p, weekDays: cur.includes(i)?cur.filter(x=>x!==i):[...cur,i].sort()}; })} style={{flex:1,padding:"8px 0",borderRadius:10,border:`2px solid ${sel?C.rose:C.border}`,background:sel?C.rose:C.white,color:sel?C.white:[0,6].includes(i)?C.pink3:C.sub,fontWeight:800,fontSize:13,cursor:"pointer"}}>{d}</button>
+                    );})}
+                  </div>
+                  {weekDaysInvalid&&<div style={{fontSize:10,color:C.tomato,marginTop:5}}>⚠️ 요일을 하나 이상 선택해주세요</div>}
+                </div>
+              )}
+
+              {todoForm.repeatType==="monthly"&&(
+                <div style={{marginBottom:12}}>
+                  <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>매월 며칠</label>
+                  <select value={todoForm.monthDay||1} onChange={e=>setTodoForm(p=>({...p,monthDay:Number(e.target.value)}))} style={{...inp,marginBottom:0,cursor:"pointer"}}>
+                    {Array.from({length:31}).map((_,i)=><option key={i+1} value={i+1}>{i+1}일</option>)}
+                  </select>
+                  <div style={{fontSize:10,color:C.sub,marginTop:4}}>31일이 없는 달은 자동으로 건너뛰어요</div>
+                </div>
+              )}
+
               <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 루틴 시작일</label>
               <input type="date" style={{...inp,marginBottom:0}} value={todoForm.startDate||todayStr} onChange={e=>setTodoForm(p=>({...p,startDate:e.target.value}))}/>
-              <div style={{fontSize:10,color:C.sub,marginTop:4}}>이 날짜부터 달성률에 반영돼요</div>
-            </div>
+              <div style={{fontSize:10,color:C.sub,marginTop:4,marginBottom:4}}>이 날짜부터 달성률에 반영돼요</div>
+            </>
           )}
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
             {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{!todoForm.date&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
             <button onClick={()=>setTodoModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
-            <button onClick={saveTodo} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>저장</button>
+            <button onClick={saveTodo} disabled={weekDaysInvalid} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:weekDaysInvalid?"default":"pointer",fontWeight:800,background:weekDaysInvalid?C.pink1:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:weekDaysInvalid?C.sub:C.white}}>저장</button>
           </div>
         </ModalWrap>
       )}
@@ -1052,7 +1222,7 @@ export default function App() {
               <div><div style={{fontSize:18,fontWeight:800,color:C.rose}}>🍅 짠토의 플래너</div><div style={{fontSize:12,color:C.sub}}>{selDate}</div></div>
               <Ring pct={totalPctOn(selDate)} size={66} stroke={7} color={C.rose} bg={C.pink1}/>
             </div>
-            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.archived&&(!t.date||isSame(t.date,selDate))).map(t=>({...t,done:isDone(t,selDate)})); if(!items.length) return null; return (
+            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.archived&&itemAppliesOn(t,selDate)).map(t=>({...t,done:isDone(t,selDate)})); if(!items.length) return null; return (
               <div key={cat.id} style={{background:"rgba(255,255,255,0.7)",borderRadius:12,padding:"10px 14px",marginBottom:8}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>{cat.emoji}</span><span style={{fontSize:13,fontWeight:700}}>{cat.name}</span></div><span style={{fontSize:13,fontWeight:800,color:cat.color}}>{pct}%</span></div>
                 <div style={{height:7,borderRadius:99,background:C.pink1,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
