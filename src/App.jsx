@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { pushPlannerData, pullPlannerData } from "./firebase";
 
 const C = {
   bg:"#FFF8F6", pink1:"#FFE0D6", pink2:"#FFBCAA", pink3:"#FF7A5C",
@@ -854,7 +855,7 @@ export default function App() {
   cloudCodeRef.current = cloudCode;
 
   function scheduleAutoSync() {
-    if (!autoSyncRef.current || !cloudCodeRef.current || !window.storage) return;
+    if (!autoSyncRef.current || !cloudCodeRef.current) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(()=>{ doCloudPush(cloudCodeRef.current, true); }, 1200);
   }
@@ -867,11 +868,9 @@ export default function App() {
   async function doCloudPush(code, silent) {
     const c = (code||"").trim();
     if (!c) { if(!silent) setCloudStatus({type:"err",text:"❌ 코드를 입력해주세요"}); return; }
-    if (!window.storage) { if(!silent) setCloudStatus({type:"err",text:"❌ 이 환경에서는 클라우드 저장을 쓸 수 없어요"}); return; }
     try {
       const payload = { events, todos, cats, memos, updatedAt: new Date().toISOString() };
-      const res = await window.storage.set(`jjanto:${c}`, JSON.stringify(payload), true);
-      if (!res) throw new Error("저장 실패");
+      await pushPlannerData(c, payload);
       setCloudCode(c); save("jjanto_cloud_code", c);
       if (!silent) setCloudStatus({type:"ok",text:`✅ 클라우드에 저장했어요 (${new Date().toLocaleTimeString("ko-KR")})`});
     } catch(err) {
@@ -882,11 +881,9 @@ export default function App() {
   async function doCloudPull(code) {
     const c = (code||"").trim();
     if (!c) { setCloudStatus({type:"err",text:"❌ 코드를 입력해주세요"}); return; }
-    if (!window.storage) { setCloudStatus({type:"err",text:"❌ 이 환경에서는 클라우드 저장을 쓸 수 없어요"}); return; }
     try {
-      const res = await window.storage.get(`jjanto:${c}`, true);
-      if (!res || !res.value) { setCloudStatus({type:"warn",text:"⚠️ 아직 이 코드로 저장된 데이터가 없어요. 먼저 '올리기'를 눌러주세요."}); return; }
-      const data = JSON.parse(res.value);
+      const data = await pullPlannerData(c);
+      if (!data) { setCloudStatus({type:"warn",text:"⚠️ 아직 이 코드로 저장된 데이터가 없어요. 먼저 '올리기'를 눌러주세요."}); return; }
       if (data.events) { setEvents(data.events); save("jjanto_events",data.events); }
       if (data.todos)  { setTodos(data.todos);   save("jjanto_todos",data.todos); }
       if (data.cats)   { setCats(data.cats);     save("jjanto_cats",data.cats); }
