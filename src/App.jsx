@@ -80,7 +80,12 @@ function repeatLabel(item) {
   const type = item.repeatType || "daily";
   if (type === "daily") return "매일";
   if (type === "weekly") {
-    const names = (item.weekDays||[]).slice().sort().map(d=>DAYS_KO[d]);
+    const days = (item.weekDays||[]).slice().sort();
+    const isWeekday = days.length===5 && [1,2,3,4,5].every(v=>days.includes(v));
+    const isWeekend = days.length===2 && [0,6].every(v=>days.includes(v));
+    if (isWeekday) return "매주 평일";
+    if (isWeekend) return "매주 주말";
+    const names = days.map(d=>DAYS_KO[d]);
     return names.length ? `매주 ${names.join("·")}` : "매주";
   }
   if (type === "monthly") return `매월 ${item.monthDay||1}일`;
