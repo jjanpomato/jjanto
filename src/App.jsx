@@ -1006,7 +1006,32 @@ export default function App() {
 
   function openAddEvent(date){ const fc=activeCats[0]; setForm({title:"",date:date||selDate,endDate:"",time:"",allDay:false,catId:fc?.id||"",color:fc?.color||C.pink3,done:false}); setModal("addEvent"); }
   function openEditEvent(e){ setForm({...e}); setModal("editEvent"); }
-  function saveEvent(){ if(!form.title.trim()) return; const cat=catById(form.catId); const c={...form,color:cat?.color||form.color}; if(modal==="addEvent") setEventsS(p=>[...p,{...c,id:genId()}]); else setEventsS(p=>p.map(e=>e.id===form.id?{...c}:e)); setModal(null); }
+  function saveEvent(){
+    if(!form.title.trim()) return;
+    const cat=catById(form.catId);
+    const c={...form,color:cat?.color||form.color};
+    if(modal==="addEvent"){
+      setEventsS(p=>[...p,{...c,id:genId()}]);
+      if(form.catId){
+        const datesForTodos=[];
+        if(form.allDay && form.endDate && form.endDate>form.date){
+          let d=new Date(form.date);
+          const end=new Date(form.endDate);
+          while(fmtDate(d)<=fmtDate(end)){
+            datesForTodos.push(fmtDate(d));
+            d.setDate(d.getDate()+1);
+          }
+        } else {
+          datesForTodos.push(form.date);
+        }
+        const newTodos=datesForTodos.map(ds=>({id:genId(),title:form.title.trim(),date:ds,done:false}));
+        setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]),...newTodos]}));
+      }
+    } else {
+      setEventsS(p=>p.map(e=>e.id===form.id?{...c}:e));
+    }
+    setModal(null);
+  }
   function deleteEvent(id){ setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
   function openAddTodo(cid){ setTodoForm({title:"",date:"",startDate:todayStr,repeatType:"daily",weekDays:[],monthDay:1}); setTodoModal({mode:"add",catId:cid}); }
   function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr,repeatType:item.repeatType||"daily",weekDays:item.weekDays||[],monthDay:item.monthDay||1}); setTodoModal({mode:"edit",catId:cid,item}); }
