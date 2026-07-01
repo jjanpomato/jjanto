@@ -550,7 +550,8 @@ function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, i
   );
 }
 
-function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, events, openEditEvent, cloudCode, autoSync}) {
+function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, deleteCat, events, openEditEvent, cloudCode, autoSync}) {
+  const [confirmDeleteCat, setConfirmDeleteCat] = useState(null);
   return (
     <div style={{padding:"18px 14px",display:"flex",flexDirection:"column",gap:2,overflow:"auto",flex:1}}>
       {!isMobile&&<div style={{fontSize:19,fontWeight:800,color:C.rose,padding:"2px 6px 10px",display:"flex",alignItems:"center",gap:8}}>🍅 짠토의 플래너</div>}
@@ -606,7 +607,26 @@ function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilt
       {cats.filter(c=>c.hidden).length>0&&(
         <div style={{marginTop:8}}>
           <div style={{fontSize:11,fontWeight:800,color:C.sub,padding:"0 6px 4px"}}>숨긴 분류</div>
-          {cats.filter(c=>c.hidden).map(c=><button key={c.id} onClick={()=>showCat(c.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub,marginBottom:3,width:"100%"}}>{c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span></button>)}        </div>
+          {cats.filter(c=>c.hidden).map(c=>(
+            <div key={c.id} style={{marginBottom:5}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <button onClick={()=>showCat(c.id)} style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub}}>
+                  {c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span>
+                </button>
+                <button onClick={()=>setConfirmDeleteCat(confirmDeleteCat===c.id?null:c.id)} style={{padding:"5px 8px",borderRadius:8,border:"none",background:"#FFF0F0",color:"#E63946",cursor:"pointer",fontSize:12,flexShrink:0}}>🗑️</button>
+              </div>
+              {confirmDeleteCat===c.id&&(
+                <div style={{marginTop:5,padding:"10px 12px",background:"#FFF0F0",borderRadius:10,border:"1.5px solid #FFB3B3"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#E63946",marginBottom:8}}>⚠️ 영구 삭제하면 이 분류의 할 일 기록도 모두 사라져요. 정말 삭제할까요?</div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setConfirmDeleteCat(null)} style={{flex:1,padding:"6px",borderRadius:8,border:"none",background:C.white,color:C.sub,fontWeight:700,cursor:"pointer",fontSize:12}}>취소</button>
+                    <button onClick={()=>{deleteCat(c.id);setConfirmDeleteCat(null);}} style={{flex:1,padding:"6px",borderRadius:8,border:"none",background:"#E63946",color:"white",fontWeight:800,cursor:"pointer",fontSize:12}}>영구 삭제</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
       <div style={{marginTop:"auto",paddingTop:10,fontSize:11,color:C.sub,textAlign:"center"}}>총 {events.length}개 일정 🍓</div>
     </div>
@@ -1096,6 +1116,10 @@ export default function App() {
   function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
   function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
+  function deleteCat(id){
+    setCatsS(p=>p.filter(c=>c.id!==id));
+    setTodosS(p=>{ const n={...p}; delete n[id]; return n; }); // 해당 분류의 할 일도 함께 삭제
+  }
 
   function buildGrid(){ const y=curDate.getFullYear(),m=curDate.getMonth(),first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate(),cells=[]; for(let i=0;i<first;i++) cells.push(null); for(let d=1;d<=last;d++) cells.push(new Date(y,m,d)); return cells; }
   const cells=buildGrid(), weeks=weeksInMonth();
@@ -1112,7 +1136,7 @@ export default function App() {
       {!isMobile&&(
         <div style={{display:"flex",flex:1,overflow:"hidden"}}>
           <aside style={{width:sideOpen?260:0,minWidth:sideOpen?260:0,background:"linear-gradient(160deg,#FFF3F1,#FFE2D8)",borderRight:`1.5px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"all .25s",flexShrink:0}}>
-            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} events={events} openEditEvent={openEditEvent} cloudCode={cloudCode} autoSync={autoSync}/>
+            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} deleteCat={deleteCat} events={events} openEditEvent={openEditEvent} cloudCode={cloudCode} autoSync={autoSync}/>
           </aside>
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderBottom:`1.5px solid ${C.border}`,background:C.white,flexWrap:"wrap"}}>
