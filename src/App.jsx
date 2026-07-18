@@ -45,7 +45,7 @@ const INIT_TODOS = {
   work:    [{id:genId(),title:"기획서 초안 작성",    date:todayStr,done:false},{id:genId(),title:"팀 미팅 준비",    date:todayStr,done:true}],
   economy: [{id:genId(),title:"주식 포트폴리오 확인",date:todayStr,done:false},{id:genId(),title:"월 가계부 정리",  date:todayStr,done:false}],
   fitness: [{id:genId(),title:"30분 조깅",          date:todayStr,done:true}, {id:genId(),title:"스트레칭 10분",   date:todayStr,done:false}],
-  personal:[{id:genId(),title:"일기 쓰기",           date:todayStr,done:false},{id:genId(),title:"비타민 챙겨먹기",date:todayStr,done:true}],
+  personal:[{id:genId(),title:"일기 쓰기",            date:todayStr,done:false},{id:genId(),title:"비타민 챙겨먹기",date:todayStr,done:true}],
   apptech: [{id:genId(),title:"캐시워크 걷기",        date:todayStr,done:true}, {id:genId(),title:"토스 행운복권",  date:todayStr,done:false}],
   event:   [{id:genId(),title:"쿠팡 할인쿠폰 확인",  date:todayStr,done:false}],
 };
@@ -53,7 +53,6 @@ const INIT_TODOS = {
 function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fb; }catch{ return fb; } }
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
-// ---- 반복 루틴 판정 헬퍼 ----
 function isRoutine(item) {
   return !item.date;
 }
@@ -98,8 +97,6 @@ function repeatIcon(item) {
   return "🔁";
 }
 
-// 할 일을 "날짜 고정" ↔ "반복 루틴" 사이로 바꿀 때, 안 쓰는 예전 필드가
-// 객체에 그대로 남아있지 않도록 정리해주는 헬퍼 (Firebase 저장 안정성용)
 function cleanTodoItem(t, isFixedDate) {
   const n = { ...t };
   if (isFixedDate) {
@@ -550,8 +547,7 @@ function SyncModal({onClose, handleExport, handleImport, importRef, importMsg, i
   );
 }
 
-function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, deleteCat, events, openEditEvent, cloudCode, autoSync}) {
-  const [confirmDeleteCat, setConfirmDeleteCat] = useState(null);
+function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilter, activeCats, sideEvents, catById, weeks, weeklyPct, cats, showCat, events, openEditEvent, cloudCode, autoSync}) {
   return (
     <div style={{padding:"18px 14px",display:"flex",flexDirection:"column",gap:2,overflow:"auto",flex:1}}>
       {!isMobile&&<div style={{fontSize:19,fontWeight:800,color:C.rose,padding:"2px 6px 10px",display:"flex",alignItems:"center",gap:8}}>🍅 짠토의 플래너</div>}
@@ -570,12 +566,12 @@ function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilt
       </div>
       <div style={{background:C.white,borderRadius:12,padding:"10px 12px",border:`1px solid ${C.border}`,minHeight:60}}>
         {sideEvents.length===0&&<div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"6px 0"}}>일정이 없어요</div>}
-        {sideEvents.map(e=>{ const cat=catById(e.catId); return (
+        {sideEvents.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return (
           <div key={e.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,cursor:"pointer"}} onClick={()=>openEditEvent(e)}>
             <span style={{fontSize:13}}>{cat?.emoji||"📌"}</span>
             <div style={{flex:1,overflow:"hidden"}}>
               <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.title}</div>
-              {e.time&&<div style={{fontSize:10,color:C.sub}}>{e.time}</div>}
+              {isMulti ? <div style={{fontSize:10,color:C.sub}}>{e.date.slice(5).replace("-","/")}~{e.endDate.slice(5).replace("-","/")}</div> : e.time&&<div style={{fontSize:10,color:C.sub}}>{e.time}</div>}
             </div>
             <span style={{width:7,height:7,borderRadius:"50%",background:e.color,flexShrink:0}}/>
           </div>
@@ -607,25 +603,7 @@ function Sidebar({isMobile, view, setView, setSyncModal, sideFilter, setSideFilt
       {cats.filter(c=>c.hidden).length>0&&(
         <div style={{marginTop:8}}>
           <div style={{fontSize:11,fontWeight:800,color:C.sub,padding:"0 6px 4px"}}>숨긴 분류</div>
-          {cats.filter(c=>c.hidden).map(c=>(
-            <div key={c.id} style={{marginBottom:5}}>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <button onClick={()=>showCat(c.id)} style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub}}>
-                  {c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span>
-                </button>
-                <button onClick={()=>setConfirmDeleteCat(confirmDeleteCat===c.id?null:c.id)} style={{padding:"5px 8px",borderRadius:8,border:"none",background:"#FFF0F0",color:"#E63946",cursor:"pointer",fontSize:12,flexShrink:0}}>🗑️</button>
-              </div>
-              {confirmDeleteCat===c.id&&(
-                <div style={{marginTop:5,padding:"10px 12px",background:"#FFF0F0",borderRadius:10,border:"1.5px solid #FFB3B3"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:"#E63946",marginBottom:8}}>⚠️ 영구 삭제하면 이 분류의 할 일 기록도 모두 사라져요. 정말 삭제할까요?</div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>setConfirmDeleteCat(null)} style={{flex:1,padding:"6px",borderRadius:8,border:"none",background:C.white,color:C.sub,fontWeight:700,cursor:"pointer",fontSize:12}}>취소</button>
-                    <button onClick={()=>{deleteCat(c.id);setConfirmDeleteCat(null);}} style={{flex:1,padding:"6px",borderRadius:8,border:"none",background:"#E63946",color:"white",fontWeight:800,cursor:"pointer",fontSize:12}}>영구 삭제</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+          {cats.filter(c=>c.hidden).map(c=><button key={c.id} onClick={()=>showCat(c.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:C.pink1,border:"none",cursor:"pointer",fontSize:12,color:C.sub,marginBottom:3,width:"100%"}}>{c.emoji} {c.name}<span style={{marginLeft:"auto",fontSize:10,color:C.rose}}>복원</span></button>)}
         </div>
       )}
       <div style={{marginTop:"auto",paddingTop:10,fontSize:11,color:C.sub,textAlign:"center"}}>총 {events.length}개 일정 🍓</div>
@@ -654,7 +632,7 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
               </div>
               {dayEvs.slice(0,maxEvs).map(e=>{ const isStart=isSame(e.date,ds); return (
                 <div key={e.id} onClick={ev=>{ev.stopPropagation();openEditEvent(e);}} style={{padding:isMobile?"1px 4px":"2px 6px",borderRadius:6,fontSize:isMobile?10:12,fontWeight:600,background:e.color+"22",color:e.color,marginTop:2,overflow:"hidden",whiteSpace:"nowrap",cursor:"pointer"}}>
-                  {isStart?e.title:"↔"}
+                  {isStart?e.title:(isMobile?"↔":"↔ "+e.title)}
                 </div>
               );})}
               {dayEvs.length>maxEvs&&<div style={{fontSize:10,color:C.sub,marginTop:1}}>+{dayEvs.length-maxEvs}</div>}
@@ -669,7 +647,28 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
   );
 }
 
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, isSameDate, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard}) {
+// 개선된 ListView: 카테고리 드래그 순서 변경 기능 + 대제목 영역 확장 적용
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat}) {
+  const dragItem = useRef();
+  const dragOverItem = useRef();
+
+  function handleDragStart(e, index) {
+    dragItem.current = index;
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragEnter(e, index) {
+    dragOverItem.current = index;
+  }
+
+  function handleDragEnd() {
+    if (dragItem.current !== undefined && dragOverItem.current !== undefined && dragItem.current !== dragOverItem.current) {
+      onMoveCat(dragItem.current, dragOverItem.current);
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+  }
+
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"12px 14px":"16px 20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
@@ -695,23 +694,38 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
           <button onClick={()=>setShareCard(true)} style={{background:`linear-gradient(135deg,${C.pink3},${C.rose})`,border:"none",borderRadius:10,padding:"8px 10px",cursor:"pointer",color:C.white,fontSize:16,flexShrink:0}}>📸</button>
         </div>
       </div>
+      
+      <div style={{fontSize:11,color:C.sub,marginBottom:10,display:"flex",alignItems:"center",gap:4}}>
+        <span>💡 팁: 분류 이름(상단 영역)을 마우스로 드래그하면 원하는 순서대로 위치를 바꿀 수 있어요!</span>
+      </div>
+
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(270px,1fr))",gap:isMobile?10:14}}>
-        {activeCats.map(cat=>{
+        {activeCats.map((cat, index)=>{
           const items=visibleTodosOn(cat.id,selDate);
           const pct=catPctOn(cat.id,selDate),isHiding=hideCompleted[cat.id]!==false;
           const vis=isHiding?items.filter(t=>!t.done):items, hiddenCount=items.filter(t=>t.done).length;
           return (
-            <div key={cat.id} style={{background:C.white,borderRadius:16,padding:"14px",border:`1.5px solid ${C.border}`,boxShadow:`0 2px 10px ${C.pink1}`}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:18}}>{cat.emoji}</span>
-                  <span style={{fontSize:14,fontWeight:800}}>{cat.name}</span>
-                  <span style={{fontSize:10,color:cat.color,background:cat.color+"22",padding:"2px 8px",borderRadius:99}}>{items.length}개</span>
+            <div 
+              key={cat.id} 
+              draggable 
+              onDragStart={(e)=>handleDragStart(e, index)}
+              onDragEnter={(e)=>handleDragEnter(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e)=>e.preventDefault()}
+              style={{background:C.white,borderRadius:16,padding:"14px",border:`1.5px solid ${C.border}`,boxShadow:`0 2px 10px ${C.pink1}`,transition:"transform 0.15s"}}
+            >
+              {/* 드래그 및 제목 영역 개선 (대제목 flex:1, whiteSpace:nowrap 적용) */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,cursor:"move",userSelect:"none",paddingBottom:4,borderBottom:`1px dashed ${C.border}`}} title="드래그해서 순서 변경">
+                <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,overflow:"hidden"}}>
+                  <span style={{color:C.sub,opacity:0.4,fontSize:13,letterSpacing:-2,marginRight:2}}>:::</span>
+                  <span style={{fontSize:18,flexShrink:0}}>{cat.emoji}</span>
+                  <span style={{fontSize:15,fontWeight:800,flex:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cat.name}</span>
+                  <span style={{fontSize:10,color:cat.color,background:cat.color+"22",padding:"2px 8px",borderRadius:99,flexShrink:0}}>{items.length}개</span>
                 </div>
-                <div style={{display:"flex",gap:3,alignItems:"center"}}>
-                  <button onClick={()=>setHideCompleted(p=>({...p,[cat.id]:!isHiding}))} style={{padding:"3px 8px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:11,fontWeight:700}}>{isHiding?`✅ 완료숨김(${hiddenCount})`:"숨김해제"}</button>
-                  <button onClick={()=>{setCatForm({name:cat.name,emoji:cat.emoji,color:cat.color});setCatModal({id:cat.id});}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.sub}}>✏️</button>
-                  <button onClick={()=>openAddTodo(cat.id)} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
+                <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,marginLeft:6}}>
+                  <button onClick={(e)=>{e.stopPropagation();setHideCompleted(p=>({...p,[cat.id]:!isHiding}));}} style={{padding:"3px 8px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:11,fontWeight:700}}>{isHiding?`✅ 완료숨김(${hiddenCount})`:"숨김해제"}</button>
+                  <button onClick={(e)=>{e.stopPropagation();setCatForm({name:cat.name,emoji:cat.emoji,color:cat.color});setCatModal({id:cat.id});}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.sub}}>✏️</button>
+                  <button onClick={(e)=>{e.stopPropagation();openAddTodo(cat.id);}} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><Bar pct={pct} color={cat.color}/><span style={{fontSize:11,fontWeight:700,color:cat.color,minWidth:28}}>{pct}%</span></div>
@@ -756,7 +770,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
         <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:C.rose}}>총 달성률</div><div style={{fontSize:12,color:C.sub}}>{allTodosOn(selDate).filter(t=>t.done).length}/{allTodosOn(selDate).length} 완료</div></div>
         <button onClick={()=>setSyncModal(true)} style={{background:"linear-gradient(135deg,#E8F5E9,#C8E6C9)",border:"1.5px solid #A5D6A7",borderRadius:10,padding:"7px 12px",cursor:"pointer",color:"#2E7D32",fontWeight:800,fontSize:12}}>🔄 동기화</button>
       </div>
-      {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.title}</div><div style={{fontSize:11,color:C.sub}}>{e.time||"종일"}</div></div></div>; })}</>}
+      {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.title}</div><div style={{fontSize:11,color:C.sub}}>{isMulti ? `${e.date.slice(5).replace("-","/")} ~ ${e.endDate.slice(5).replace("-","/")}${e.time ? " ("+e.time+")" : ""}` : (e.time||"종일")}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
       {activeCats.map(cat=>{
         const items=visibleTodosOn(cat.id,selDate);
@@ -767,8 +781,8 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
         return (
         <div key={cat.id} style={{background:C.white,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${C.border}`,marginBottom:10}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800}}>{cat.name}</span></div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,overflow:"hidden"}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cat.name}</span></div>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
               <span style={{fontSize:11,fontWeight:700,color:cat.color}}>{catPctOn(cat.id,selDate)}%</span>
               {hiddenCount>0&&<button onClick={()=>setHideCompleted(p=>({...p,[cat.id]:!isHiding}))} style={{padding:"3px 7px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:10,fontWeight:700}}>{isHiding?`✅${hiddenCount}`:"해제"}</button>}
               <button onClick={()=>openAddTodo(cat.id)} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
@@ -880,7 +894,6 @@ export default function App() {
   const [events,    setEvents]    = useState(()=>load("jjanto_events",INIT_EVENTS));
   const [todos,     setTodos]     = useState(()=>{
     const loaded = load("jjanto_todos", INIT_TODOS);
-    // 예전 버전에서 저장된 항목에 남아있을 수 있는 undefined/불필요 필드 정리
     const cleaned = {};
     Object.keys(loaded).forEach(cid=>{
       cleaned[cid] = (loaded[cid]||[]).map(t=>cleanTodoItem(t, !!t.date));
@@ -906,7 +919,6 @@ export default function App() {
   const [catModal,  setCatModal]  =useState(null);
   const [catForm,   setCatForm]   =useState({name:"",emoji:"⭐",color:C.pink3});
 
-  // ---- 클라우드 동기화 상태 ----
   const [cloudCode, setCloudCode]   = useState(()=>load("jjanto_cloud_code",""));
   const [autoSync,  setAutoSyncRaw] = useState(()=>load("jjanto_autosync",false));
   const [cloudStatus,setCloudStatus]= useState(null);
@@ -926,6 +938,16 @@ export default function App() {
   const setTodosS =v=>{ const n=typeof v==="function"?v(todos):v;  setTodos(n);  save("jjanto_todos",n);  scheduleAutoSync(); };
   const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   scheduleAutoSync(); };
   const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  scheduleAutoSync(); };
+
+  // 개선: 카테고리 순서 드래그 변경 함수
+  function handleMoveCat(fromIndex, toIndex) {
+    const active = cats.filter(c=>!c.hidden);
+    const hidden = cats.filter(c=>c.hidden);
+    const updatedActive = [...active];
+    const [moved] = updatedActive.splice(fromIndex, 1);
+    updatedActive.splice(toIndex, 0, moved);
+    setCatsS([...updatedActive, ...hidden]);
+  }
 
   async function doCloudPush(code, silent) {
     const c = (code||"").trim();
@@ -1044,24 +1066,49 @@ export default function App() {
     for(let d=1;d<=last;d++) ws.add(getWeekOfMonthMon(fmtDate(new Date(y,m,d))));
     return [...ws].sort();
   }
-  const eventsOn=ds=>events.filter(e=>e.allDay&&e.endDate?ds>=e.date&&ds<=e.endDate:isSame(e.date,ds)).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
 
-  function openAddEvent(date){ const fc=activeCats[0]; setForm({title:"",date:date||selDate,endDate:"",time:"",allDay:false,catId:fc?.id||"",color:fc?.color||C.pink3,done:false}); setModal("addEvent"); }
-  function openEditEvent(e){ setForm({...e}); setModal("editEvent"); }
+  const eventsOn=ds=>events.filter(e=>{
+    const hasEnd = e.endDate && e.endDate >= e.date;
+    return hasEnd ? (ds >= e.date && ds <= e.endDate) : isSame(e.date, ds);
+  }).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+
+  function openAddEvent(date){ 
+    const fc=activeCats[0]; 
+    setForm({
+      title:"",
+      date:date||selDate||todayStr,
+      endDate:"",
+      time:"",
+      isPeriod:false,
+      allDay:false,
+      catId:fc?.id||"",
+      color:fc?.color||C.pink3,
+      done:false
+    }); 
+    setModal("addEvent"); 
+  }
+
+  function openEditEvent(e){ 
+    setForm({
+      ...e,
+      isPeriod: !!(e.endDate && e.endDate > e.date)
+    }); 
+    setModal("editEvent"); 
+  }
+
   function saveEvent(){
     if(!form.title.trim()) return;
     const cat=catById(form.catId);
-    const c={...form,color:cat?.color||form.color};
+    const end = form.isPeriod ? (form.endDate || form.date) : "";
+    const c={...form, endDate:end, color:cat?.color||form.color};
     if(modal==="addEvent"){
       setEventsS(p=>[...p,{...c,id:genId()}]);
-      // 일정을 추가할 때, 같은 제목의 할 일을 해당 카테고리에 자동으로 만들어줌 (제목만, 시간 제외)
-      // 이후 일정을 수정/삭제해도 할 일은 독립적으로 따로 관리됨 (추가 시 1회성 복사)
       if(form.catId){
         const datesForTodos=[];
-        if(form.allDay && form.endDate && form.endDate>form.date){
+        if(form.isPeriod && end && end > form.date){
           let d=new Date(form.date);
-          const end=new Date(form.endDate);
-          while(fmtDate(d)<=fmtDate(end)){
+          const endD=new Date(end);
+          while(fmtDate(d)<=fmtDate(endD)){
             datesForTodos.push(fmtDate(d));
             d.setDate(d.getDate()+1);
           }
@@ -1076,9 +1123,13 @@ export default function App() {
     }
     setModal(null);
   }
+
   function deleteEvent(id){ setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
-  function openAddTodo(cid){ setTodoForm({title:"",date:"",startDate:todayStr,repeatType:"daily",weekDays:[],monthDay:1}); setTodoModal({mode:"add",catId:cid}); }
+
+  function openAddTodo(cid){ setTodoForm({title:"",date:selDate,startDate:selDate||todayStr,repeatType:"daily",weekDays:[],monthDay:1}); setTodoModal({mode:"add",catId:cid}); }
+  
   function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr,repeatType:item.repeatType||"daily",weekDays:item.weekDays||[],monthDay:item.monthDay||1}); setTodoModal({mode:"edit",catId:cid,item}); }
+  
   function saveTodo(){
     if(!todoForm.title.trim()) return;
     const {mode,catId,item}=todoModal;
@@ -1095,6 +1146,7 @@ export default function App() {
     else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?cleanTodoItem({...t,...base},isFixedDate):t)}));
     setTodoModal(null);
   }
+
   function deleteTodo(cid,id){
     const item=(todos[cid]||[]).find(t=>t.id===id);
     if(item && !item.date) {
@@ -1116,10 +1168,6 @@ export default function App() {
   function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
   function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
-  function deleteCat(id){
-    setCatsS(p=>p.filter(c=>c.id!==id));
-    setTodosS(p=>{ const n={...p}; delete n[id]; return n; }); // 해당 분류의 할 일도 함께 삭제
-  }
 
   function buildGrid(){ const y=curDate.getFullYear(),m=curDate.getMonth(),first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate(),cells=[]; for(let i=0;i<first;i++) cells.push(null); for(let d=1;d<=last;d++) cells.push(new Date(y,m,d)); return cells; }
   const cells=buildGrid(), weeks=weeksInMonth();
@@ -1136,7 +1184,7 @@ export default function App() {
       {!isMobile&&(
         <div style={{display:"flex",flex:1,overflow:"hidden"}}>
           <aside style={{width:sideOpen?260:0,minWidth:sideOpen?260:0,background:"linear-gradient(160deg,#FFF3F1,#FFE2D8)",borderRight:`1.5px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"all .25s",flexShrink:0}}>
-            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} deleteCat={deleteCat} events={events} openEditEvent={openEditEvent} cloudCode={cloudCode} autoSync={autoSync}/>
+            <Sidebar isMobile={isMobile} view={view} setView={setView} setSyncModal={setSyncModal} sideFilter={sideFilter} setSideFilter={setSideFilter} activeCats={activeCats} sideEvents={sideEvents} catById={catById} weeks={weeks} weeklyPct={weeklyPct} cats={cats} showCat={showCat} events={events} openEditEvent={openEditEvent} cloudCode={cloudCode} autoSync={autoSync}/>
           </aside>
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderBottom:`1.5px solid ${C.border}`,background:C.white,flexWrap:"wrap"}}>
@@ -1152,7 +1200,7 @@ export default function App() {
               <button onClick={()=>openAddEvent(selDate)} style={{padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>🍅 추가</button>
             </div>
             {view==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
+            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat}/>}
             {view==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
             {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
@@ -1171,7 +1219,7 @@ export default function App() {
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {mobileTab==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard}/>}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat}/>}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
@@ -1206,29 +1254,54 @@ export default function App() {
       {(modal==="addEvent"||modal==="editEvent")&&(
         <ModalWrap onClose={()=>setModal(null)} isMobile={isMobile}>
           <div style={{fontSize:16,fontWeight:800,color:C.rose,marginBottom:16}}>🍅 {modal==="addEvent"?"새 일정 추가":"일정 편집"}</div>
+          
           <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>제목</label>
           <KoreanInput key={form.id||"new-event"} style={inp} placeholder="일정 제목" value={form.title||""} onChange={v=>setForm(p=>({...p,title:v}))} autoFocus/>
+          
           <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>분류</label>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
             {activeCats.map(cat=><button key={cat.id} onClick={()=>setForm(p=>({...p,catId:cat.id,color:cat.color}))} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:99,border:`2px solid ${form.catId===cat.id?cat.color:C.border}`,background:form.catId===cat.id?cat.color+"22":C.white,color:form.catId===cat.id?cat.color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700}}>{cat.emoji} {cat.name}</button>)}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
-            <span>🌟</span><span style={{fontSize:13,fontWeight:700,flex:1}}>종일 / 기간 일정</span>
-            <div onClick={()=>setForm(p=>({...p,allDay:!p.allDay,time:""}))} style={{width:42,height:24,borderRadius:99,background:form.allDay?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
-              <div style={{position:"absolute",top:3,left:form.allDay?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
+
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
+            <span>🗓️</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700}}>기간(여러 날) 일정</div>
+              <div style={{fontSize:10,color:C.sub}}>시작일과 종료일을 지정해요</div>
+            </div>
+            <div onClick={()=>setForm(p=>({...p, isPeriod:!p.isPeriod, endDate:!p.isPeriod?(p.endDate||p.date):""}))} style={{width:42,height:24,borderRadius:99,background:form.isPeriod?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
+              <div style={{position:"absolute",top:3,left:form.isPeriod?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
             </div>
           </div>
-          {form.allDay?(
-            <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>시작일</label><input type="date" style={inp} value={form.date||""} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-              <div style={{flex:1}}><label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>종료일</label><input type="date" style={inp} value={form.endDate||form.date||""} min={form.date} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))}/></div>
+
+          {form.isPeriod ? (
+            <div style={{display:"flex",gap:10,background:C.white,padding:"10px",borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🟢 시작일</label>
+                <input type="date" style={{...inp,marginBottom:0}} value={form.date||""} onChange={e=>setForm(p=>({...p,date:e.target.value, endDate: p.endDate && p.endDate < e.target.value ? e.target.value : p.endDate}))}/>
+              </div>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🔴 종료일</label>
+                <input type="date" style={{...inp,marginBottom:0}} value={form.endDate||form.date||""} min={form.date} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))}/>
+              </div>
             </div>
-          ):(
-            <div style={{display:"flex",gap:10}}>
-              <div style={{flex:1}}><label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>날짜</label><input type="date" style={inp} value={form.date||""} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-              <div style={{flex:1}}><label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>시간</label><input type="time" style={inp} value={form.time||""} onChange={e=>setForm(p=>({...p,time:e.target.value}))}/></div>
+          ) : (
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 날짜</label>
+              <input type="date" style={{...inp,marginBottom:0}} value={form.date||""} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/>
             </div>
           )}
+
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#FFF8FA",borderRadius:10,border:`1px dashed ${C.border}`,marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <input type="checkbox" id="allDayChk" checked={form.allDay||false} onChange={e=>setForm(p=>({...p, allDay:e.target.checked, time:""}))} style={{width:16,height:16,accentColor:C.rose,cursor:"pointer"}}/>
+              <label htmlFor="allDayChk" style={{fontSize:12,fontWeight:700,color:C.text,cursor:"pointer"}}>⏰ 종일 일정 (시간 미지정)</label>
+            </div>
+            {!form.allDay && (
+              <input type="time" style={{...inp,width:"120px",marginBottom:0,padding:"4px 8px"}} value={form.time||""} onChange={e=>setForm(p=>({...p,time:e.target.value}))}/>
+            )}
+          </div>
+
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
             {modal==="editEvent"&&<button onClick={()=>deleteEvent(form.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>}
             <button onClick={()=>setModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
