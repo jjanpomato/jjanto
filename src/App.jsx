@@ -58,6 +58,7 @@ function isRoutine(item) {
 }
 function routineAppliesOn(item, ds) {
   if (item.startDate && ds < item.startDate) return false;
+  if (item.endDate && ds > item.endDate) return false; // 기간 할 일 종료일 체크
   const type = item.repeatType || "daily";
   if (type === "daily") return true;
   if (type === "weekly") {
@@ -76,6 +77,10 @@ function itemAppliesOn(item, ds) {
 }
 function repeatLabel(item) {
   if (!isRoutine(item)) return null;
+  if (item.endDate) {
+    if (item.startDate === item.endDate) return item.startDate.slice(5).replace("-","/");
+    return `${item.startDate.slice(5).replace("-","/")} ~ ${item.endDate.slice(5).replace("-","/")}`;
+  }
   const type = item.repeatType || "daily";
   if (type === "daily") return "매일";
   if (type === "weekly") {
@@ -91,18 +96,22 @@ function repeatLabel(item) {
   return "반복";
 }
 function repeatIcon(item) {
+  if (item.endDate) return "🗓️";
   const type = item.repeatType || "daily";
   if (type === "weekly") return "📅";
   if (type === "monthly") return "🗓️";
   return "🔁";
 }
 
-function cleanTodoItem(t, isFixedDate) {
+function cleanTodoItem(t, type) {
   const n = { ...t };
-  if (isFixedDate) {
-    delete n.startDate; delete n.repeatType; delete n.weekDays; delete n.monthDay; delete n.doneLog;
+  if (type === "single") {
+    delete n.startDate; delete n.endDate; delete n.repeatType; delete n.weekDays; delete n.monthDay; delete n.doneLog;
+  } else if (type === "period") {
+    delete n.date; delete n.done; delete n.weekDays; delete n.monthDay;
+    n.repeatType = "daily";
   } else {
-    delete n.date; delete n.done;
+    delete n.date; delete n.done; delete n.endDate;
     if (n.repeatType !== "weekly") delete n.weekDays;
     if (n.repeatType !== "monthly") delete n.monthDay;
   }
@@ -443,7 +452,8 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
                       <span style={{fontSize:13,color:C.sub,flexShrink:0}}>{repeatIcon(item)}</span>
                       <div style={{flex:1}}>
                         <div style={{fontSize:14,color:C.sub,textDecoration:"line-through",fontWeight:500}}>{item.title}</div>
-                        {item.startDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
+                        {item.startDate && !item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
+                        {item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>🗓️ 기간 할일 · {item.startDate} ~ {item.endDate}</div>}
                         {item.doneLog && Object.keys(item.doneLog).length > 0 && (
                           <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}일</div>
                         )}
@@ -647,7 +657,6 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
   );
 }
 
-// 개선된 ListView: 카테고리 드래그 순서 변경 기능 + 대제목 영역 확장 적용
 function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat}) {
   const dragItem = useRef();
   const dragOverItem = useRef();
@@ -714,7 +723,6 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
               onDragOver={(e)=>e.preventDefault()}
               style={{background:C.white,borderRadius:16,padding:"14px",border:`1.5px solid ${C.border}`,boxShadow:`0 2px 10px ${C.pink1}`,transition:"transform 0.15s"}}
             >
-              {/* 드래그 및 제목 영역 개선 (대제목 flex:1, whiteSpace:nowrap 적용) */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,cursor:"move",userSelect:"none",paddingBottom:4,borderBottom:`1px dashed ${C.border}`}} title="드래그해서 순서 변경">
                 <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,overflow:"hidden"}}>
                   <span style={{color:C.sub,opacity:0.4,fontSize:13,letterSpacing:-2,marginRight:2}}>:::</span>
@@ -723,7 +731,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
                   <span style={{fontSize:10,color:cat.color,background:cat.color+"22",padding:"2px 8px",borderRadius:99,flexShrink:0}}>{items.length}개</span>
                 </div>
                 <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,marginLeft:6}}>
-                  <button onClick={(e)=>{e.stopPropagation();setHideCompleted(p=>({...p,[cat.id]:!isHiding}));}} style={{padding:"3px 8px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:11,fontWeight:700}}>{isHiding?`✅ 완료숨김(${hiddenCount})`:"숨김해제"}</button>
+                  <button onClick={(e)=>{e.stopPropagation();setHideCompleted(p=>({...p,[cat.id]:!isHiding}));}} style={{padding:"3px 8px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:11,fontWeight:700}}>{isHiding?`숨김(${hiddenCount})`:"숨김해제"}</button>
                   <button onClick={(e)=>{e.stopPropagation();setCatForm({name:cat.name,emoji:cat.emoji,color:cat.color});setCatModal({id:cat.id});}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.sub}}>✏️</button>
                   <button onClick={(e)=>{e.stopPropagation();openAddTodo(cat.id);}} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
                 </div>
@@ -784,7 +792,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
             <div style={{display:"flex",alignItems:"center",gap:6,flex:1,overflow:"hidden"}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cat.name}</span></div>
             <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
               <span style={{fontSize:11,fontWeight:700,color:cat.color}}>{catPctOn(cat.id,selDate)}%</span>
-              {hiddenCount>0&&<button onClick={()=>setHideCompleted(p=>({...p,[cat.id]:!isHiding}))} style={{padding:"3px 7px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:10,fontWeight:700}}>{isHiding?`✅${hiddenCount}`:"해제"}</button>}
+              {hiddenCount>0&&<button onClick={()=>setHideCompleted(p=>({...p,[cat.id]:!isHiding}))} style={{padding:"3px 7px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:10,fontWeight:700}}>{isHiding?`숨김(${hiddenCount})`:"해제"}</button>}
               <button onClick={()=>openAddTodo(cat.id)} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
             </div>
           </div>
@@ -915,7 +923,7 @@ export default function App() {
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
   const [todoModal, setTodoModal] =useState(null);
-  const [todoForm,  setTodoForm]  =useState({title:"",date:"",startDate:todayStr,repeatType:"daily",weekDays:[],monthDay:1});
+  const [todoForm,  setTodoForm]  = useState({title:"", type:"single", date:"",startDate:todayStr,endDate:todayStr, repeatType:"daily",weekDays:[],monthDay:1});
   const [catModal,  setCatModal]  =useState(null);
   const [catForm,   setCatForm]   =useState({name:"",emoji:"⭐",color:C.pink3});
 
@@ -939,7 +947,6 @@ export default function App() {
   const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   scheduleAutoSync(); };
   const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  scheduleAutoSync(); };
 
-  // 개선: 카테고리 순서 드래그 변경 함수
   function handleMoveCat(fromIndex, toIndex) {
     const active = cats.filter(c=>!c.hidden);
     const hidden = cats.filter(c=>c.hidden);
@@ -1104,19 +1111,13 @@ export default function App() {
     if(modal==="addEvent"){
       setEventsS(p=>[...p,{...c,id:genId()}]);
       if(form.catId){
-        const datesForTodos=[];
         if(form.isPeriod && end && end > form.date){
-          let d=new Date(form.date);
-          const endD=new Date(end);
-          while(fmtDate(d)<=fmtDate(endD)){
-            datesForTodos.push(fmtDate(d));
-            d.setDate(d.getDate()+1);
-          }
+          const newTodo={id:genId(), title:form.title.trim(), date:"", startDate:form.date, endDate:end, repeatType:"daily", doneLog:{}};
+          setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]), newTodo]}));
         } else {
-          datesForTodos.push(form.date);
+          const newTodo={id:genId(), title:form.title.trim(), date:form.date, done:false};
+          setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]), newTodo]}));
         }
-        const newTodos=datesForTodos.map(ds=>({id:genId(),title:form.title.trim(),date:ds,done:false}));
-        setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]),...newTodos]}));
       }
     } else {
       setEventsS(p=>p.map(e=>e.id===form.id?{...c}:e));
@@ -1126,24 +1127,50 @@ export default function App() {
 
   function deleteEvent(id){ setEventsS(p=>p.filter(e=>e.id!==id)); setModal(null); }
 
-  function openAddTodo(cid){ setTodoForm({title:"",date:selDate,startDate:selDate||todayStr,repeatType:"daily",weekDays:[],monthDay:1}); setTodoModal({mode:"add",catId:cid}); }
+  function openAddTodo(cid){ 
+    setTodoForm({
+      title:"",
+      type:"single",
+      date:selDate,
+      startDate:selDate||todayStr,
+      endDate:selDate||todayStr,
+      repeatType:"daily",
+      weekDays:[],
+      monthDay:1
+    }); 
+    setTodoModal({mode:"add",catId:cid}); 
+  }
   
-  function openEditTodo(cid,item){ setTodoForm({title:item.title,date:item.date||"",startDate:item.startDate||todayStr,repeatType:item.repeatType||"daily",weekDays:item.weekDays||[],monthDay:item.monthDay||1}); setTodoModal({mode:"edit",catId:cid,item}); }
+  function openEditTodo(cid,item){ 
+    setTodoForm({
+      title:item.title,
+      type: item.date ? "single" : item.endDate ? "period" : "routine",
+      date:item.date||"",
+      startDate:item.startDate||todayStr,
+      endDate:item.endDate||item.startDate||todayStr,
+      repeatType:item.repeatType||"daily",
+      weekDays:item.weekDays||[],
+      monthDay:item.monthDay||1
+    }); 
+    setTodoModal({mode:"edit",catId:cid,item}); 
+  }
   
   function saveTodo(){
     if(!todoForm.title.trim()) return;
     const {mode,catId,item}=todoModal;
-    const isFixedDate = !!todoForm.date;
     let base;
-    if (isFixedDate) {
+    if (todoForm.type === "single") {
       base = { title: todoForm.title, date: todoForm.date };
+    } else if (todoForm.type === "period") {
+      base = { title: todoForm.title, date: "", startDate: todoForm.startDate, endDate: todoForm.endDate || todoForm.startDate, repeatType: "daily" };
     } else {
       base = { title: todoForm.title, date: "", startDate: todoForm.startDate, repeatType: todoForm.repeatType||"daily" };
       if (todoForm.repeatType==="weekly") base.weekDays = todoForm.weekDays||[];
       if (todoForm.repeatType==="monthly") base.monthDay = todoForm.monthDay||1;
     }
-    if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),cleanTodoItem({id:genId(),...base,done:false},isFixedDate)]}));
-    else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?cleanTodoItem({...t,...base},isFixedDate):t)}));
+
+    if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),cleanTodoItem({id:genId(),...base,doneLog:{}},todoForm.type)]}));
+    else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?cleanTodoItem({...t,...base},todoForm.type):t)}));
     setTodoModal(null);
   }
 
@@ -1176,7 +1203,7 @@ export default function App() {
   const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, setSyncModal, eventsOn, catById, hideCompleted, setHideCompleted };
   const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone };
 
-  const weekDaysInvalid = !todoForm.date && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
+  const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
 
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Nunito','Apple SD Gothic Neo',sans-serif",background:C.bg,color:C.text,overflow:"hidden",flexDirection:"column"}}>
@@ -1314,14 +1341,52 @@ export default function App() {
         <ModalWrap onClose={()=>setTodoModal(null)} isMobile={isMobile}>
           <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16}}>🌸 할 일 {todoModal.mode==="add"?"추가":"편집"}</div>
           <KoreanInput key={todoModal?.item?.id||"new-todo"} style={inp} placeholder="할 일 내용" value={todoForm.title||""} onChange={v=>setTodoForm(p=>({...p,title:v}))} autoFocus/>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
-            <span>🔁</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>반복 루틴</div><div style={{fontSize:10,color:C.sub}}>날짜 없이 등록하면 반복 주기로 보여요</div></div>
-            <div onClick={()=>setTodoForm(p=>({...p,date:p.date?"":selDate}))} style={{width:42,height:24,borderRadius:99,background:!todoForm.date?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
-              <div style={{position:"absolute",top:3,left:!todoForm.date?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
-            </div>
+          
+          <div style={{display:"flex", gap:8, marginBottom:16}}>
+            {[
+              {v:"single", lb:"하루 할 일", ic:"✅"},
+              {v:"period", lb:"기간 (여러 날)", ic:"🗓️"},
+              {v:"routine", lb:"반복 루틴", ic:"🔁"}
+            ].map(opt => (
+              <button 
+                key={opt.v} 
+                onClick={()=>setTodoForm(p=>({...p, type:opt.v}))} 
+                style={{
+                  flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6, 
+                  padding:"12px 0", borderRadius:12, 
+                  border:`2px solid ${todoForm.type===opt.v?C.rose:C.border}`, 
+                  background:todoForm.type===opt.v?C.rose+"12":C.white, 
+                  color:todoForm.type===opt.v?C.rose:C.sub, 
+                  fontWeight:todoForm.type===opt.v?800:600, fontSize:12, cursor:"pointer"
+                }}
+              >
+                <span style={{fontSize:20}}>{opt.ic}</span>
+                {opt.lb}
+              </button>
+            ))}
           </div>
-          {todoForm.date&&<input type="date" style={inp} value={todoForm.date} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>}
-          {!todoForm.date&&(
+
+          {todoForm.type === "single" && (
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 날짜</label>
+              <input type="date" style={{...inp,marginBottom:0}} value={todoForm.date||""} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>
+            </div>
+          )}
+
+          {todoForm.type === "period" && (
+            <div style={{display:"flex",gap:10,marginBottom:12}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🟢 시작일</label>
+                <input type="date" style={{...inp,marginBottom:0}} value={todoForm.startDate||""} onChange={e=>setTodoForm(p=>({...p,startDate:e.target.value, endDate: p.endDate && p.endDate < e.target.value ? e.target.value : p.endDate}))}/>
+              </div>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🔴 종료일</label>
+                <input type="date" style={{...inp,marginBottom:0}} value={todoForm.endDate||todoForm.startDate||""} min={todoForm.startDate} onChange={e=>setTodoForm(p=>({...p,endDate:e.target.value}))}/>
+              </div>
+            </div>
+          )}
+
+          {todoForm.type === "routine" && (
             <>
               <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>반복 주기</label>
               <div style={{display:"flex",gap:6,marginBottom:12}}>
@@ -1366,8 +1431,9 @@ export default function App() {
               <div style={{fontSize:10,color:C.sub,marginTop:4,marginBottom:4}}>이 날짜부터 달성률에 반영돼요</div>
             </>
           )}
+
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
-            {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{!todoForm.date&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
+            {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{todoForm.type==="routine"&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
             <button onClick={()=>setTodoModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
             <button onClick={saveTodo} disabled={weekDaysInvalid} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:weekDaysInvalid?"default":"pointer",fontWeight:800,background:weekDaysInvalid?C.pink1:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:weekDaysInvalid?C.sub:C.white}}>저장</button>
           </div>
