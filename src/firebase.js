@@ -1,6 +1,6 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, get } from "firebase/database";
+import { getDatabase, ref, set, get, onValue } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -50,4 +50,29 @@ export async function pullPlannerData(code) {
   if (!key) throw new Error("코드가 비어있어요");
   const snap = await get(ref(db, `jjanto/${key}`));
   return snap.exists() ? snap.val() : null;
+}
+
+// 💡 실시간 데이터 구독 함수 (클라우드 데이터가 바뀔 때마다 자동 실행)
+export function subscribePlannerData(code, onUpdate, onError) {
+  const key = safeKey(code);
+  if (!key) {
+    if (onError) onError(new Error("코드가 비어있어요"));
+    return () => {};
+  }
+
+  const roomRef = ref(db, `jjanto/${key}`);
+  
+  // onValue: 데이터가 변경될 때마다 실시간으로 감지해서 onUpdate 실행
+  const unsubscribe = onValue(roomRef, (snapshot) => {
+    if (snapshot.exists()) {
+      onUpdate(snapshot.val());
+    } else {
+      onUpdate(null); // 아직 데이터가 없는 새 방
+    }
+  }, (error) => {
+    if (onError) onError(error);
+  });
+
+  // 컴포넌트가 꺼질 때 실시간 감지를 멈추는 해제 함수 반환
+  return () => unsubscribe();
 }
