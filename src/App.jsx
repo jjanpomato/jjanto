@@ -32,6 +32,26 @@ function getWeekOfMonthMon(ds) {
   return Math.ceil((dayOfMonth + firstOffset) / 7);
 }
 
+// 💡 [추가] 이미지 용량 자동 압축 헬퍼 함수 (클라우드 용량 부족 및 버벅김 방지)
+function compressImage(file, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxW = 800; // 최대 가로 800px로 제한
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round((h * maxW) / w); w = maxW; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL("image/jpeg", 0.75)); // JPEG 품질 75%로 압축
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 const today    = new Date();
 const todayStr = fmtDate(today);
 const tom      = fmtDate(new Date(today.getFullYear(),today.getMonth(),today.getDate()+1));
@@ -480,7 +500,6 @@ function Sidebar({isMobile, view, setView, sideFilter, setSideFilter, activeCats
     <div style={{padding:"18px 14px",display:"flex",flexDirection:"column",gap:2,overflow:"auto",flex:1}}>
       {!isMobile&&<div style={{fontSize:19,fontWeight:800,color:C.rose,padding:"2px 6px 10px",display:"flex",alignItems:"center",gap:8}}>🍅 짠토의 플래너</div>}
       
-      {/* 실시간 클라우드 상태 표시 바 */}
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:12,fontSize:13,fontWeight:700,background:cloudCode?"linear-gradient(135deg,#E8F5E9,#F0FFF8)":"#FFF0F0",color:cloudCode?"#2E7D32":"#C62828",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",marginBottom:6}}>
         <span>{cloudCode?"☁️":"⚠️"}</span> 
         <div style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -505,8 +524,8 @@ function Sidebar({isMobile, view, setView, sideFilter, setSideFilter, activeCats
           <div key={e.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,cursor:"pointer"}} onClick={()=>openEditEvent(e)}>
             <span style={{fontSize:13}}>{cat?.emoji||"📌"}</span>
             <div style={{flex:1,overflow:"hidden"}}>
-              <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.title}</div>
-              {isMulti ? <div style={{fontSize:10,color:C.sub}}>{e.date.slice(5).replace("-","/")}~{e.endDate.slice(5).replace("-","/")}</div> : e.time&&<div style={{fontSize:10,color:C.sub}}>{e.time}</div>}
+              <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.repeatMonthly&&"🔁 "}{e.title}</div>
+              {isMulti ? <div style={{fontSize:10,color:C.sub}}>{e.date.slice(5).replace("-","/")}~{e.endDate.slice(5).replace("-","/")}</div> : <div style={{fontSize:10,color:C.sub}}>{e.repeatMonthly?"매월 고정":(e.time||"종일")}</div>}
             </div>
             <span style={{width:7,height:7,borderRadius:"50%",background:e.color,flexShrink:0}}/>
           </div>
@@ -567,7 +586,7 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
               </div>
               {dayEvs.slice(0,maxEvs).map(e=>{ const isStart=isSame(e.date,ds); return (
                 <div key={e.id} onClick={ev=>{ev.stopPropagation();openEditEvent(e);}} style={{padding:isMobile?"1px 4px":"2px 6px",borderRadius:6,fontSize:isMobile?10:12,fontWeight:600,background:e.color+"22",color:e.color,marginTop:2,overflow:"hidden",whiteSpace:"nowrap",cursor:"pointer"}}>
-                  {isStart?e.title:(isMobile?"↔":"↔ "+e.title)}
+                  {e.repeatMonthly ? `🔁 ${e.title}` : (isStart?e.title:(isMobile?"↔":"↔ "+e.title))}
                 </div>
               );})}
               {dayEvs.length>maxEvs&&<div style={{fontSize:10,color:C.sub,marginTop:1}}>+{dayEvs.length-maxEvs}</div>}
@@ -701,7 +720,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
         <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:C.rose}}>총 달성률</div><div style={{fontSize:12,color:C.sub}}>{allTodosOn(selDate).filter(t=>t.done).length}/{allTodosOn(selDate).length} 완료</div></div>
         <div style={{background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"7px 12px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:12}}>{cloudCode?"☁️ 연동중":"⚠️ 로컬"}</div>
       </div>
-      {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.title}</div><div style={{fontSize:11,color:C.sub}}>{isMulti ? `${e.date.slice(5).replace("-","/")} ~ ${e.endDate.slice(5).replace("-","/")}${e.time ? " ("+e.time+")" : ""}` : (e.time||"종일")}</div></div></div>; })}</>}
+      {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.repeatMonthly&&"🔁 "}{e.title}</div><div style={{fontSize:11,color:C.sub}}>{isMulti ? `${e.date.slice(5).replace("-","/")} ~ ${e.endDate.slice(5).replace("-","/")}${e.time ? " ("+e.time+")" : ""}` : (e.repeatMonthly?"매월 고정":(e.time||"종일"))}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
       {activeCats.map(cat=>{
         const items=visibleTodosOn(cat.id,selDate);
@@ -736,18 +755,26 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
   );
 }
 
+// 💡 [추가] 사진 첨부 기능이 포함된 메모 카드 컴포넌트
 function MemoCard({ m, editMemo, deleteMemo }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.text);
+  const [draftImg, setDraftImg] = useState(m.image || null);
+  const fileRef = useRef(null);
 
   function save() {
-    if (!draft.trim()) return;
-    editMemo(m.id, draft.trim());
+    if (!draft.trim() && !draftImg) return;
+    editMemo(m.id, draft.trim(), draftImg);
     setEditing(false);
   }
   function cancel() {
     setDraft(m.text);
+    setDraftImg(m.image || null);
     setEditing(false);
+  }
+  function handleImageChange(e) {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file, setDraftImg);
   }
 
   return (
@@ -761,19 +788,36 @@ function MemoCard({ m, editMemo, deleteMemo }) {
             rows={4}
             style={{width:"100%",padding:"8px 10px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",fontFamily:"inherit",background:"#FFF8FA",color:C.text,resize:"none",lineHeight:1.6,boxSizing:"border-box",marginBottom:10}}
           />
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button onClick={cancel} style={{padding:"6px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub,fontSize:13}}>취소</button>
-            <button onClick={save} style={{padding:"6px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,fontSize:13}}>저장</button>
+          {draftImg && (
+            <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
+              <img src={draftImg} alt="memo" style={{maxWidth:"100%",maxHeight:200,borderRadius:8,border:`1px solid ${C.border}`}}/>
+              <button onClick={()=>setDraftImg(null)} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,0.6)",color:"white",border:"none",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:12,fontWeight:"bold"}}>✕</button>
+            </div>
+          )}
+          <div style={{display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <button onClick={()=>fileRef.current?.click()} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.pink1,color:C.text,fontSize:12,fontWeight:700,cursor:"pointer"}}>📷 사진 변경</button>
+              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageChange}/>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={cancel} style={{padding:"6px 14px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub,fontSize:13}}>취소</button>
+              <button onClick={save} style={{padding:"6px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,fontSize:13}}>저장</button>
+            </div>
           </div>
         </>
       ) : (
         <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{m.text}</div>
-            <div style={{fontSize:10,color:C.sub,marginTop:6}}>{new Date(m.createdAt).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+            {m.text && <div style={{fontSize:14,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap",wordBreak:"break-all",marginBottom:m.image?10:0}}>{m.text}</div>}
+            {m.image && (
+              <div style={{marginBottom:6}}>
+                <img src={m.image} alt="memo" style={{maxWidth:"100%",maxHeight:300,borderRadius:10,border:`1px solid ${C.border}`,display:"block"}}/>
+              </div>
+            )}
+            <div style={{fontSize:10,color:C.sub,marginTop:4}}>{new Date(m.createdAt).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-            <button onClick={()=>{ setDraft(m.text); setEditing(true); }} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.sub,opacity:.6,padding:"2px 4px"}}>✏️</button>
+            <button onClick={()=>{ setDraft(m.text); setDraftImg(m.image||null); setEditing(true); }} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.sub,opacity:.6,padding:"2px 4px"}}>✏️</button>
             <button onClick={()=>deleteMemo(m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.sub,opacity:.5,padding:"2px 4px"}}>🗑️</button>
           </div>
         </div>
@@ -782,26 +826,59 @@ function MemoCard({ m, editMemo, deleteMemo }) {
   );
 }
 
+// 💡 [추가] 사진 첨부가 가능한 메모 뷰 컴포넌트
 function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, deleteMemo}) {
+  const [memoImg, setMemoImg] = useState(null);
+  const fileRef = useRef(null);
+
+  function handleAdd() {
+    if(!memoInput.trim() && !memoImg) return;
+    addMemo(memoImg);
+    setMemoImg(null);
+  }
+
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (file) compressImage(file, setMemoImg);
+    e.target.value = "";
+  }
+
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 24px"}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
         <div style={{fontSize:18,fontWeight:800,color:C.rose,marginBottom:16}}>🗒️ 메모</div>
+        
+        {memoImg && (
+          <div style={{position:"relative",display:"inline-block",marginBottom:10}}>
+            <img src={memoImg} alt="preview" style={{maxHeight:120,borderRadius:8,border:`1.5px solid ${C.border}`}}/>
+            <button onClick={()=>setMemoImg(null)} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,0.6)",color:"white",border:"none",borderRadius:"50%",width:22,height:22,cursor:"pointer",fontSize:12,fontWeight:"bold"}}>✕</button>
+          </div>
+        )}
+
         <div style={{display:"flex",gap:8,marginBottom:20,alignItems:"flex-end"}}>
-          <KoreanTextarea
-            key={memos.length}
-            value={memoInput}
-            onChange={setMemoInput}
-            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); addMemo(); } }}
-            placeholder="메모를 입력하세요... (Enter로 저장)"
-            rows={3}
-            style={{flex:1,padding:"10px 14px",border:`1.5px solid ${C.border}`,borderRadius:14,fontSize:14,outline:"none",fontFamily:"inherit",background:"#FFF8FA",color:C.text,resize:"none",lineHeight:1.6}}
-          />
-          <button onClick={addMemo} style={{padding:"10px 16px",borderRadius:14,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:14,cursor:"pointer",flexShrink:0,height:52}}>저장</button>
+          <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+            <KoreanTextarea
+              key={memos.length}
+              value={memoInput}
+              onChange={setMemoInput}
+              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); handleAdd(); } }}
+              placeholder="메모를 입력하세요... (Enter로 저장)"
+              rows={3}
+              style={{width:"100%",padding:"10px 14px",border:`1.5px solid ${C.border}`,borderRadius:14,fontSize:14,outline:"none",fontFamily:"inherit",background:"#FFF8FA",color:C.text,resize:"none",lineHeight:1.6,boxSizing:"border-box"}}
+            />
+            <div style={{display:"flex",justifyContent:"flex-start"}}>
+              <button onClick={()=>fileRef.current?.click()} style={{padding:"6px 12px",borderRadius:10,background:C.pink1,color:C.rose,border:`1px solid ${C.border}`,fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                <span>📷</span> 사진 첨부
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageSelect}/>
+            </div>
+          </div>
+          <button onClick={handleAdd} style={{padding:"10px 18px",borderRadius:14,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:14,cursor:"pointer",flexShrink:0,height:52}}>저장</button>
         </div>
+
         {memos.length===0&&(
           <div style={{textAlign:"center",padding:"40px 0",color:C.sub,fontSize:14}}>
-            <div style={{fontSize:36,marginBottom:8}}>🗒️</div>메모가 없어요. 첫 메모를 남겨봐요!
+            <div style={{fontSize:36,marginBottom:8}}>🗒️</div>메모가 없어요. 사진이나 글을 남겨봐요!
           </div>
         )}
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -822,7 +899,6 @@ export default function App() {
     return ()=>window.removeEventListener("resize",h); 
   },[]);
 
-  // 1. 💡 URL 파라미터(?room=코드) 감지 및 로드
   const [cloudCode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
@@ -866,27 +942,21 @@ export default function App() {
   
   const [cloudStatus,setCloudStatus]= useState(null);
 
-  // 💡 실시간 동기화 제어용 Ref (내가 수정한 데이터가 다시 날아올 때 무한 루프 방지)
   const isLocalUpdating = useRef(false);
   const stateRef = useRef({ events, todos, cats, memos });
   stateRef.current = { events, todos, cats, memos };
   const syncTimer = useRef(null);
 
-  // 2. 💡 실시간 데이터 구독 (useEffect)
   useEffect(() => {
     if (!cloudCode) return;
-
     setCloudStatus({ type: "warn", text: "☁️ 실시간 클라우드 연결 중..." });
-
     const unsubscribe = subscribePlannerData(
       cloudCode,
       (remoteData) => {
-        // 내가 서버로 보낸 데이터가 Echo로 돌아오면 리렌더링 무시
         if (isLocalUpdating.current) {
           isLocalUpdating.current = false;
           return;
         }
-
         if (remoteData) {
           if (remoteData.events) { setEvents(remoteData.events); save("jjanto_events", remoteData.events); }
           if (remoteData.todos)  { setTodos(remoteData.todos);   save("jjanto_todos", remoteData.todos); }
@@ -901,20 +971,16 @@ export default function App() {
         setCloudStatus({ type: "err", text: "❌ 연결 끊김 (로컬 모드)" });
       }
     );
-
     return () => unsubscribe();
   }, [cloudCode]);
 
-  // 3. 💡 1.2초 디바운스 자동 저장 함수
   function triggerAutoSave() {
     if (!cloudCode) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
-
     setCloudStatus({ type: "warn", text: "☁️ 변경 사항 저장 중..." });
-
     syncTimer.current = setTimeout(async () => {
       try {
-        isLocalUpdating.current = true; // 내가 수정한 데이터임을 표시
+        isLocalUpdating.current = true;
         const payload = {
           ...stateRef.current,
           updatedAt: new Date().toISOString(),
@@ -931,7 +997,6 @@ export default function App() {
     }, 1200);
   }
 
-  // 4. 💡 상태 변경 래퍼 함수 (상태 변경 + 로컬 저장 + 클라우드 자동 전송)
   const setEventsS=v=>{ const n=typeof v==="function"?v(events):v; setEvents(n); save("jjanto_events",n); triggerAutoSave(); };
   const setTodosS =v=>{ const n=typeof v==="function"?v(todos):v;  setTodos(n);  save("jjanto_todos",n);  triggerAutoSave(); };
   const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   triggerAutoSave(); };
@@ -946,12 +1011,15 @@ export default function App() {
     setCatsS([...updatedActive, ...hidden]);
   }
 
-  function addMemo() {
-    if(!memoInput.trim()) return;
-    setMemosS(p=>[{id:genId(), text:memoInput.trim(), createdAt:new Date().toISOString()}, ...p]);
+  // 💡 [추가] 사진도 함께 저장/편집할 수 있도록 메모 함수 수정
+  function addMemo(imgData = null) {
+    if(!memoInput.trim() && !imgData) return;
+    setMemosS(p=>[{id:genId(), text:memoInput.trim(), image:imgData, createdAt:new Date().toISOString()}, ...p]);
     setMemoInput("");
   }
-  function editMemo(id, text) { setMemosS(p=>p.map(m=>m.id===id?{...m,text,updatedAt:new Date().toISOString()}:m)); }
+  function editMemo(id, text, imgData) { 
+    setMemosS(p=>p.map(m=>m.id===id?{...m,text,image:imgData,updatedAt:new Date().toISOString()}:m)); 
+  }
   function deleteMemo(id) { setMemosS(p=>p.filter(m=>m.id!==id)); }
 
   const activeCats=cats.filter(c=>!c.hidden);
@@ -995,7 +1063,16 @@ export default function App() {
     return [...ws].sort();
   }
 
-  const eventsOn=ds=>events.filter(e=>{
+  // 💡 [추가] 매월 고정 일정(repeatMonthly)인 경우 월말 계산까지 고려하여 캘린더에 표시
+  const eventsOn = ds => events.filter(e => {
+    if (e.repeatMonthly) {
+      const startDay = new Date(e.date).getDate();
+      const curDateObj = new Date(ds);
+      const curDay = curDateObj.getDate();
+      const lastDayOfCurMonth = new Date(curDateObj.getFullYear(), curDateObj.getMonth() + 1, 0).getDate();
+      const targetDay = Math.min(startDay, lastDayOfCurMonth); // 31일 설정 시 2월은 28/29일에 표시
+      return ds >= e.date && curDay === targetDay;
+    }
     const hasEnd = e.endDate && e.endDate >= e.date;
     return hasEnd ? (ds >= e.date && ds <= e.endDate) : isSame(e.date, ds);
   }).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
@@ -1004,28 +1081,28 @@ export default function App() {
     const fc=activeCats[0]; 
     setForm({
       title:"", date:date||selDate||todayStr, endDate:"", time:"",
-      isPeriod:false, allDay:false, catId:fc?.id||"", color:fc?.color||C.pink3, done:false
+      isPeriod:false, allDay:false, repeatMonthly:false, catId:fc?.id||"", color:fc?.color||C.pink3, done:false
     }); 
     setModal("addEvent"); 
   }
 
   function openEditEvent(e){ 
-    setForm({ ...e, isPeriod: !!(e.endDate && e.endDate > e.date) }); 
+    setForm({ ...e, isPeriod: !!(e.endDate && e.endDate > e.date), repeatMonthly: !!e.repeatMonthly }); 
     setModal("editEvent"); 
   }
 
   function saveEvent(){
     if(!form.title.trim()) return;
     const cat=catById(form.catId);
-    const end = form.isPeriod ? (form.endDate || form.date) : "";
+    const end = (form.isPeriod && !form.repeatMonthly) ? (form.endDate || form.date) : "";
     const c={...form, endDate:end, color:cat?.color||form.color};
     if(modal==="addEvent"){
       setEventsS(p=>[...p,{...c,id:genId()}]);
       if(form.catId){
-        if(form.isPeriod && end && end > form.date){
+        if(form.isPeriod && !form.repeatMonthly && end && end > form.date){
           const newTodo={id:genId(), title:form.title.trim(), date:"", startDate:form.date, endDate:end, repeatType:"daily", doneLog:{}};
           setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]), newTodo]}));
-        } else {
+        } else if(!form.repeatMonthly) {
           const newTodo={id:genId(), title:form.title.trim(), date:form.date, done:false};
           setTodosS(p=>({...p,[form.catId]:[...(p[form.catId]||[]), newTodo]}));
         }
@@ -1180,17 +1257,27 @@ export default function App() {
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
             {activeCats.map(cat=><button key={cat.id} onClick={()=>setForm(p=>({...p,catId:cat.id,color:cat.color}))} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:99,border:`2px solid ${form.catId===cat.id?cat.color:C.border}`,background:form.catId===cat.id?cat.color+"22":C.white,color:form.catId===cat.id?cat.color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700}}>{cat.emoji} {cat.name}</button>)}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
-            <span>🗓️</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:700}}>기간(여러 날) 일정</div>
-              <div style={{fontSize:10,color:C.sub}}>시작일과 종료일을 지정해요</div>
-            </div>
-            <div onClick={()=>setForm(p=>({...p, isPeriod:!p.isPeriod, endDate:!p.isPeriod?(p.endDate||p.date):""}))} style={{width:42,height:24,borderRadius:99,background:form.isPeriod?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
-              <div style={{position:"absolute",top:3,left:form.isPeriod?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
-            </div>
+          
+          {/* 💡 [추가] 매월 반복 고정 일정 체크박스 */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:"#FFF0F5",borderRadius:10,border:`1px solid ${C.border}`}}>
+            <input type="checkbox" id="repeatMonthlyChk" checked={form.repeatMonthly||false} onChange={e=>setForm(p=>({...p, repeatMonthly:e.target.checked, isPeriod: e.target.checked ? false : p.isPeriod}))} style={{width:16,height:16,accentColor:C.rose,cursor:"pointer"}}/>
+            <label htmlFor="repeatMonthlyChk" style={{fontSize:12,fontWeight:800,color:C.rose,cursor:"pointer"}}>🔁 매월 이 날짜에 반복 (월간 고정 일정)</label>
           </div>
-          {form.isPeriod ? (
+
+          {!form.repeatMonthly && (
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:"#FFF0F5",borderRadius:12,border:`1.5px solid ${C.border}`}}>
+              <span>🗓️</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700}}>기간(여러 날) 일정</div>
+                <div style={{fontSize:10,color:C.sub}}>시작일과 종료일을 지정해요</div>
+              </div>
+              <div onClick={()=>setForm(p=>({...p, isPeriod:!p.isPeriod, endDate:!p.isPeriod?(p.endDate||p.date):""}))} style={{width:42,height:24,borderRadius:99,background:form.isPeriod?C.rose:C.pink1,cursor:"pointer",position:"relative"}}>
+                <div style={{position:"absolute",top:3,left:form.isPeriod?20:3,width:18,height:18,borderRadius:"50%",background:C.white,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.2)"}}/>
+              </div>
+            </div>
+          )}
+
+          {form.isPeriod && !form.repeatMonthly ? (
             <div style={{display:"flex",gap:10,background:C.white,padding:"10px",borderRadius:12,border:`1px solid ${C.border}`,marginBottom:12}}>
               <div style={{flex:1}}>
                 <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🟢 시작일</label>
@@ -1203,7 +1290,7 @@ export default function App() {
             </div>
           ) : (
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 날짜</label>
+              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>{form.repeatMonthly ? "📅 기준 날짜 (매월 이 날짜에 나타나요)" : "📅 날짜"}</label>
               <input type="date" style={{...inp,marginBottom:0}} value={form.date||""} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/>
             </div>
           )}
