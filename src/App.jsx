@@ -76,6 +76,8 @@ function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{}
 function isRoutine(item) {
   return !item.date;
 }
+
+// 💡 [수정완료] 격일(alternate) 계산 로직이 추가된 routineAppliesOn
 function routineAppliesOn(item, ds) {
   if (item.startDate && ds < item.startDate) return false;
   if (item.endDate && ds > item.endDate) return false;
@@ -89,12 +91,23 @@ function routineAppliesOn(item, ds) {
     const dom = new Date(ds).getDate();
     return item.monthDay === dom;
   }
+  // ⚡ 격일 계산: 시작일과 현재 날짜의 일수 차이가 0 또는 짝수인지 확인
+  if (type === "alternate") {
+    if (!item.startDate) return false;
+    const start = new Date(item.startDate);
+    const cur = new Date(ds);
+    const diffDays = Math.round((cur - start) / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays % 2 === 0;
+  }
   return true;
 }
+
 function itemAppliesOn(item, ds) {
   if (item.date) return isSame(item.date, ds);
   return routineAppliesOn(item, ds);
 }
+
+// 💡 [수정완료] 격일 라벨 표시 추가
 function repeatLabel(item) {
   if (!isRoutine(item)) return null;
   if (item.endDate) {
@@ -103,6 +116,7 @@ function repeatLabel(item) {
   }
   const type = item.repeatType || "daily";
   if (type === "daily") return "매일";
+  if (type === "alternate") return "격일"; // ⚡ 격일 라벨
   if (type === "weekly") {
     const days = (item.weekDays||[]).slice().sort();
     const isWeekday = days.length===5 && [1,2,3,4,5].every(v=>days.includes(v));
@@ -115,9 +129,12 @@ function repeatLabel(item) {
   if (type === "monthly") return `매월 ${item.monthDay||1}일`;
   return "반복";
 }
+
+// 💡 [수정완료] 격일 아이콘(⚡) 표시 추가
 function repeatIcon(item) {
   if (item.endDate) return "🗓️";
   const type = item.repeatType || "daily";
+  if (type === "alternate") return "⚡"; // ⚡ 격일 아이콘
   if (type === "weekly") return "📅";
   if (type === "monthly") return "🗓️";
   return "🔁";
@@ -755,7 +772,6 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
   );
 }
 
-// 💡 [추가] 사진 첨부 기능이 포함된 메모 카드 컴포넌트
 function MemoCard({ m, editMemo, deleteMemo }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.text);
@@ -826,7 +842,6 @@ function MemoCard({ m, editMemo, deleteMemo }) {
   );
 }
 
-// 💡 [추가] 사진 첨부가 가능한 메모 뷰 컴포넌트
 function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, deleteMemo}) {
   const [memoImg, setMemoImg] = useState(null);
   const fileRef = useRef(null);
@@ -1011,7 +1026,6 @@ export default function App() {
     setCatsS([...updatedActive, ...hidden]);
   }
 
-  // 💡 [추가] 사진도 함께 저장/편집할 수 있도록 메모 함수 수정
   function addMemo(imgData = null) {
     if(!memoInput.trim() && !imgData) return;
     setMemosS(p=>[{id:genId(), text:memoInput.trim(), image:imgData, createdAt:new Date().toISOString()}, ...p]);
@@ -1063,14 +1077,13 @@ export default function App() {
     return [...ws].sort();
   }
 
-  // 💡 [추가] 매월 고정 일정(repeatMonthly)인 경우 월말 계산까지 고려하여 캘린더에 표시
   const eventsOn = ds => events.filter(e => {
     if (e.repeatMonthly) {
       const startDay = new Date(e.date).getDate();
       const curDateObj = new Date(ds);
       const curDay = curDateObj.getDate();
       const lastDayOfCurMonth = new Date(curDateObj.getFullYear(), curDateObj.getMonth() + 1, 0).getDate();
-      const targetDay = Math.min(startDay, lastDayOfCurMonth); // 31일 설정 시 2월은 28/29일에 표시
+      const targetDay = Math.min(startDay, lastDayOfCurMonth);
       return ds >= e.date && curDay === targetDay;
     }
     const hasEnd = e.endDate && e.endDate >= e.date;
@@ -1258,7 +1271,6 @@ export default function App() {
             {activeCats.map(cat=><button key={cat.id} onClick={()=>setForm(p=>({...p,catId:cat.id,color:cat.color}))} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:99,border:`2px solid ${form.catId===cat.id?cat.color:C.border}`,background:form.catId===cat.id?cat.color+"22":C.white,color:form.catId===cat.id?cat.color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700}}>{cat.emoji} {cat.name}</button>)}
           </div>
           
-          {/* 💡 [추가] 매월 반복 고정 일정 체크박스 */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:"#FFF0F5",borderRadius:10,border:`1px solid ${C.border}`}}>
             <input type="checkbox" id="repeatMonthlyChk" checked={form.repeatMonthly||false} onChange={e=>setForm(p=>({...p, repeatMonthly:e.target.checked, isPeriod: e.target.checked ? false : p.isPeriod}))} style={{width:16,height:16,accentColor:C.rose,cursor:"pointer"}}/>
             <label htmlFor="repeatMonthlyChk" style={{fontSize:12,fontWeight:800,color:C.rose,cursor:"pointer"}}>🔁 매월 이 날짜에 반복 (월간 고정 일정)</label>
@@ -1349,10 +1361,19 @@ export default function App() {
             <>
               <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>반복 주기</label>
               <div style={{display:"flex",gap:6,marginBottom:12}}>
-                {[["daily","매일","☀️"],["weekly","매주","📅"],["monthly","매월","🗓️"]].map(([val,lb,ic])=>(
+                {/* 💡 [수정완료] 격일(alternate) 버튼 포함 */}
+                {[["daily","매일","☀️"],["alternate","격일","⚡"],["weekly","매주","📅"],["monthly","매월","🗓️"]].map(([val,lb,ic])=>(
                   <button key={val} onClick={()=>setTodoForm(p=>({...p,repeatType:val}))} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"8px 0",borderRadius:10,border:`2px solid ${todoForm.repeatType===val?C.rose:C.border}`,background:todoForm.repeatType===val?C.rose+"18":C.white,color:todoForm.repeatType===val?C.rose:C.sub,fontWeight:700,fontSize:12,cursor:"pointer"}}>{ic} {lb}</button>
                 ))}
               </div>
+              
+              {/* 💡 [수정완료] 격일 선택 시 안내 문구 출력 */}
+              {todoForm.repeatType==="alternate"&&(
+                <div style={{marginBottom:12, padding:"9px 12px", background:"#FFF0F5", borderRadius:10, border:`1px solid ${C.border}`, fontSize:11, color:C.rose, lineHeight:1.5}}>
+                  💡 <b>루틴 시작일({todoForm.startDate||todayStr})</b>을 기준으로 <b>하루 걸러 하루씩(2일 간격)</b> 플래너에 나타나요!
+                </div>
+              )}
+
               {todoForm.repeatType==="weekly"&&(
                 <div style={{marginBottom:12}}>
                   <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>요일 선택 (여러 개 가능)</label>
