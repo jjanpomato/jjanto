@@ -234,7 +234,12 @@ function TomatoRow({ count }) {
 function WeekCard({ wn, weekMap, activeCats, todos, isDone, isMobile, y, m }) {
   const cardRef = useRef(null);
   const [saving, setSaving] = useState(false);
-  const days = weekMap[wn] || [];
+  
+  // 💡 [수정] 주말(0:일, 6:토)을 제외하고 평일(월~금)만 필터링
+  const days = (weekMap[wn] || []).filter(ds => {
+    const dow = new Date(ds).getDay();
+    return dow >= 1 && dow <= 5;
+  });
 
   function todosOnDate(ds) {
     return activeCats.flatMap(c =>
@@ -1058,6 +1063,11 @@ export default function App() {
     for(let d=1; d<=last; d++) {
       const ds = fmtDate(new Date(y,m,d));
       if(getWeekOfMonthMon(ds) !== wn) continue;
+      
+      // 💡 [수정] 사이드바 주간 달성률 계산 시 주말(토, 일) 제외
+      const dow = new Date(ds).getDay();
+      if(dow === 0 || dow === 6) continue;
+
       const catList = cid ? [cid] : activeCats.map(c=>c.id);
       catList.forEach(cId => {
         const items = (todos[cId]||[]).filter(t => !t.archived && itemAppliesOn(t, ds));
