@@ -31,13 +31,13 @@ function getMonday(ds) {
   return fmtDate(mon);
 }
 
-// 💡 [업데이트] 주차 계산 로직 완전히 변경! (목요일이 속한 달이 그 주를 차지함 = 날짜가 과반수인 달)
+// 목요일이 속한 달을 기준으로 주차를 나누는 로직
 function getWeeksInMonth(y, m) {
   const weeks = [];
   const lastDay = new Date(y, m + 1, 0).getDate();
   for (let d = 1; d <= lastDay; d++) {
     const current = new Date(y, m, d);
-    if (current.getDay() === 4) { // 목요일 발견!
+    if (current.getDay() === 4) { // 목요일 발견 시 해당 주를 생성
       const mon = new Date(current); mon.setDate(current.getDate() - 3);
       const fri = new Date(current); fri.setDate(current.getDate() + 1);
       
@@ -187,15 +187,14 @@ function Bar({pct,color}) { return <div style={{flex:1,height:6,borderRadius:99,
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
 
-// 💡 [업데이트] 주간 할 일 컴포넌트: 토마토 디자인 + 과거 자동 접기
-function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWeekly, openEditWeekly }) {
-  // 과거 주차를 보고 있으면 기본으로 접히도록!
-  const isPastWeek = getMonday(selDate) !== getMonday(todayStr) && selDate < todayStr;
-  const [isCollapsed, setIsCollapsed] = useState(isPastWeek);
 
-  // 날짜가 바뀌면 접힘 상태 갱신
+// 💡 [수정] 이번 주 할 일 박스: 과거 날짜(어제 포함)면 무조건 자동으로 접히도록 로직 완벽 수정!
+function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWeekly, openEditWeekly }) {
+  const [isCollapsed, setIsCollapsed] = useState(selDate < todayStr);
+  const [isHiding, setIsHiding] = useState(false);
+
   useEffect(() => {
-    setIsCollapsed(getMonday(selDate) !== getMonday(todayStr) && selDate < todayStr);
+    setIsCollapsed(selDate < todayStr);
   }, [selDate, todayStr]);
 
   const wTodos = (todos.weekly || []).filter(t => !t.archived);
@@ -210,6 +209,18 @@ function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWe
     totalDone += Math.min(current, target);
   });
   const pct = totalTargets ? Math.round((totalDone / totalTargets) * 100) : 0;
+
+  const hiddenCount = wTodos.filter(t => {
+    const target = t.targetCount || 1;
+    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
+    return current >= target;
+  }).length;
+
+  const vis = isHiding ? wTodos.filter(t => {
+    const target = t.targetCount || 1;
+    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
+    return current < target;
+  }) : wTodos;
 
   return (
     <div style={{ background: "linear-gradient(135deg, #FFF9C4, #FFF59D)", borderRadius: 16, padding: "14px 16px", border: "1.5px solid #FBC02D", marginBottom: 16, boxShadow: "0 2px 10px rgba(251,192,45,0.15)", transition: "all 0.3s" }}>
@@ -229,6 +240,11 @@ function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWe
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {!isCollapsed && hiddenCount > 0 && (
+            <button onClick={() => setIsHiding(!isHiding)} style={{ padding: "4px 8px", borderRadius: 99, border: `1.5px solid ${isHiding ? "#F57F17" : "#FBC02D"}`, background: isHiding ? "rgba(245,127,23,0.15)" : "rgba(255,255,255,0.5)", color: isHiding ? "#F57F17" : "#D84315", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
+              {isHiding ? `숨김(${hiddenCount})` : "숨김해제"}
+            </button>
+          )}
           {!isCollapsed && <button onClick={openAddWeekly} style={{ background: "#F57F17", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13 }}>＋ 추가</button>}
           <button onClick={() => setIsCollapsed(!isCollapsed)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#F57F17", opacity: 0.8 }}>
             {isCollapsed ? "🔽" : "🔼"}
@@ -250,14 +266,13 @@ function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWe
           {wTodos.length === 0 && <div style={{ fontSize: 12, color: "#F57F17", textAlign: "center", padding: "10px 0", opacity: 0.7, fontWeight: 600 }}>우측 상단의 추가 버튼을 눌러보세요!</div>}
           
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {wTodos.map(item => {
+            {vis.map(item => {
               const target = item.targetCount || 1;
               const current = item.doneLog && item.doneLog[mk] === true ? 1 : (item.doneLog && item.doneLog[mk]) || 0;
               const isDone = current >= target;
 
               return (
                 <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px dashed rgba(245,127,23,0.3)" }}>
-                  {/* 💡 [업데이트] 밋밋한 동그라미 대신 토마토! */}
                   {target === 1 ? (
                     <div onClick={() => setWeeklyTodoCount(item.id, selDate, current >= 1 ? 0 : 1)} style={{ fontSize: 20, cursor: "pointer", opacity: current >= 1 ? 1 : 0.2, filter: current >= 1 ? "none" : "grayscale(100%)", flexShrink: 0, transition: "all 0.2s" }}>🍅</div>
                   ) : (
@@ -284,14 +299,17 @@ function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWe
   );
 }
 
-// 💡 [업데이트] 새로운 주차 형식(WeekCard) & 접기 기능 적용 & 주간 계획 성취도 추가!
-function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m }) {
+
+// 💡 [수정] 과거 주차 카드들이 자동으로 접히는 로직 완벽 적용
+function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m, todayStr }) {
   const cardRef = useRef(null);
   const [saving, setSaving] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  
   const days = week.days;
-
+  
+  // 💡 금요일(week.friStr)이 오늘보다 과거라면 자동으로 접히도록 설정
+  const isPastWeek = week.friStr < todayStr;
+  const [isCollapsed, setIsCollapsed] = useState(isPastWeek);
+  
   function weekStats() {
     let total = 0, done = 0;
     const catStats = {};
@@ -319,7 +337,6 @@ function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m }) {
   const isCurrentWeek = days.some(ds => ds === todayStr);
   const tc = pct === 100 ? 3 : (pct !== null && pct >= 70 ? 2 : 1);
 
-  // 💡 주간 계획 달성도 계산
   const mk = week.monStr;
   const wTodos = (todos.weekly || []).filter(t => !t.archived); 
   let wTarget = 0, wDone = 0;
@@ -406,7 +423,6 @@ function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m }) {
                 );
               })}
               
-              {/* 💡 [업데이트] 주간 계획 달성도 추가 */}
               {wTarget > 0 && (
                 <div style={{display:"flex",alignItems:"center",gap:8, marginTop:4, paddingTop:10, borderTop:`1px dashed ${C.border}`}}>
                   <span style={{fontSize:16,flexShrink:0}}>🎯</span>
@@ -426,9 +442,8 @@ function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m }) {
   );
 }
 
-function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }) {
+function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone, todayStr }) {
   const y = curDate.getFullYear(), m = curDate.getMonth();
-  // 💡 [업데이트] 새로 만든 과반수 요일 기준 주차 계산 로직 적용
   const weeksList = getWeeksInMonth(y, m);
 
   return (
@@ -449,14 +464,12 @@ function WeeklyView({ isMobile, curDate, setCurDate, todos, activeCats, isDone }
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         {weeksList.map(week => (
-          <WeekCard key={week.id} week={week} activeCats={activeCats} todos={todos} isDone={isDone} isMobile={isMobile} y={y} m={m}/>
+          <WeekCard key={week.id} week={week} activeCats={activeCats} todos={todos} isDone={isDone} isMobile={isMobile} y={y} m={m} todayStr={todayStr}/>
         ))}
       </div>
     </div>
   );
 }
-
-// Sidebar, ArchiveView 등 기타 뷰 생략 없는 통합 코드
 
 function ArchiveView({ isMobile, todos, cats, setTodosS }) {
   const [confirmId, setConfirmId] = useState(null);
@@ -1127,12 +1140,11 @@ export default function App() {
 
   function buildGrid(){ const y=curDate.getFullYear(),m=curDate.getMonth(),first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate(),cells=[]; for(let i=0;i<first;i++) cells.push(null); for(let d=1;d<=last;d++) cells.push(new Date(y,m,d)); return cells; }
   const cells=buildGrid();
-  // 💡 [업데이트] 사이드바에도 새로운 주차 로직 적용
   const weeksList = getWeeksInMonth(curDate.getFullYear(), curDate.getMonth());
   const sideEvents=sideFilter==="all"?eventsOn(todayStr):eventsOn(todayStr).filter(e=>e.catId===sideFilter);
 
   const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, eventsOn, catById, hideCompleted, setHideCompleted, cloudCode, setWeeklyTodoCount, openAddWeekly, openEditWeekly };
-  const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone };
+  const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone, todayStr };
   const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
 
   return (
