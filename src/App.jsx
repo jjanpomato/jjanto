@@ -32,13 +32,24 @@ function getWeekOfMonthMon(ds) {
   return Math.ceil((dayOfMonth + firstOffset) / 7);
 }
 
-// 💡 [새로운 기능] 특정 날짜가 속한 주의 '월요일 날짜'를 구하는 헬퍼 함수 (이번 주 할 일 달성 기록용)
 function getMonday(ds) {
   const d = new Date(ds);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const mon = new Date(d.setDate(diff));
   return fmtDate(mon);
+}
+
+// 💡 [업데이트] 현재 날짜가 속한 주의 월요일~일요일 날짜 문자열 반환 함수
+function getWeekRange(ds) {
+  const d = new Date(ds);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(d);
+  mon.setDate(diff);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return `${mon.getMonth() + 1}/${mon.getDate()} ~ ${sun.getMonth() + 1}/${sun.getDate()}`;
 }
 
 function compressImage(file, callback) {
@@ -76,15 +87,13 @@ const INIT_TODOS = {
   personal:[{id:genId(),title:"일기 쓰기",            date:todayStr,done:false},{id:genId(),title:"비타민 챙겨먹기",date:todayStr,done:true}],
   apptech: [{id:genId(),title:"캐시워크 걷기",        date:todayStr,done:true}, {id:genId(),title:"토스 행운복권",  date:todayStr,done:false}],
   event:   [{id:genId(),title:"쿠팡 할인쿠폰 확인",  date:todayStr,done:false}],
-  weekly:  [{id:genId(),title:"화장실 청소하기", doneLog:{}}, {id:genId(),title:"밀린 인강 1개 듣기", doneLog:{}}], // 💡 이번 주 할 일 초기 데이터
+  weekly:  [{id:genId(),title:"일주일 4번 조깅하기", targetCount:4, doneLog:{}}, {id:genId(),title:"밀린 인강 1개 듣기", targetCount:1, doneLog:{}}], // 💡 횟수 속성(targetCount) 추가
 };
 
 function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fb; }catch{ return fb; } }
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
-function isRoutine(item) {
-  return !item.date;
-}
+function isRoutine(item) { return !item.date; }
 
 function routineAppliesOn(item, ds) {
   if (item.startDate && ds < item.startDate) return false;
@@ -236,11 +245,36 @@ function TomatoRow({ count }) {
   );
 }
 
-// 💡 [새로운 기능] 이번 주 할 일 박스 컴포넌트
-function WeeklyPlanBox({ selDate, todos, toggleWeeklyTodo, openAddWeekly, openEditWeekly }) {
+// 💡 [업데이트] 주간 횟수(주 N회) 설정 및 기간 표시가 적용된 이번 주 할 일 컴포넌트
+function WeeklyPlanBox({ selDate, todos, setWeeklyTodoCount, openAddWeekly, openEditWeekly }) {
+  const [isHiding, setIsHiding] = useState(false);
   const wTodos = (todos.weekly || []).filter(t => !t.archived);
-  const mk = getMonday(selDate); // 선택된 날짜 기준 월요일
-  const pct = wTodos.length ? Math.round((wTodos.filter(t => t.doneLog && t.doneLog[mk]).length / wTodos.length) * 100) : 0;
+  const mk = getMonday(selDate);
+  const rangeStr = getWeekRange(selDate); 
+
+  // 전체 목표 대비 진행률 계산
+  let totalTargets = 0;
+  let totalDone = 0;
+  wTodos.forEach(t => {
+    const target = t.targetCount || 1;
+    totalTargets += target;
+    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
+    totalDone += Math.min(current, target);
+  });
+  const pct = totalTargets ? Math.round((totalDone / totalTargets) * 100) : 0;
+
+  // 숨김 처리용 계산
+  const hiddenCount = wTodos.filter(t => {
+    const target = t.targetCount || 1;
+    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
+    return current >= target;
+  }).length;
+
+  const vis = isHiding ? wTodos.filter(t => {
+    const target = t.targetCount || 1;
+    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
+    return current < target;
+  }) : wTodos;
 
   return (
     <div style={{ background: "linear-gradient(135deg, #FFF9C4, #FFF59D)", borderRadius: 16, padding: "14px 16px", border: "1.5px solid #FBC02D", marginBottom: 16, boxShadow: "0 2px 10px rgba(251,192,45,0.15)" }}>
@@ -248,11 +282,21 @@ function WeeklyPlanBox({ selDate, todos, toggleWeeklyTodo, openAddWeekly, openEd
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 20 }}>🎯</span>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "#F57F17", letterSpacing: "-0.5px" }}>이번 주 할 일</div>
-            <div style={{ fontSize: 10, color: "#F57F17", opacity: 0.8, marginTop: 1 }}>주 1회만 체크하면 돼요!</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#F57F17", letterSpacing: "-0.5px" }}>이번 주 할 일</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#F57F17", opacity: 0.7, background: "rgba(245,127,23,0.1)", padding: "2px 6px", borderRadius: 6 }}>{rangeStr}</span>
+            </div>
+            <div style={{ fontSize: 10, color: "#F57F17", opacity: 0.8, marginTop: 1 }}>목표 횟수만큼 꾸준히 달성해봐요!</div>
           </div>
         </div>
-        <button onClick={openAddWeekly} style={{ background: "#F57F17", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13 }}>＋ 추가</button>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {hiddenCount > 0 && (
+            <button onClick={() => setIsHiding(!isHiding)} style={{ padding: "4px 8px", borderRadius: 99, border: `1.5px solid ${isHiding ? "#F57F17" : "#FBC02D"}`, background: isHiding ? "rgba(245,127,23,0.15)" : "rgba(255,255,255,0.5)", color: isHiding ? "#F57F17" : "#D84315", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
+              {isHiding ? `숨김(${hiddenCount})` : "숨김해제"}
+            </button>
+          )}
+          <button onClick={openAddWeekly} style={{ background: "#F57F17", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13 }}>＋ 추가</button>
+        </div>
       </div>
       
       {wTodos.length > 0 && (
@@ -267,15 +311,33 @@ function WeeklyPlanBox({ selDate, todos, toggleWeeklyTodo, openAddWeekly, openEd
       {wTodos.length === 0 && <div style={{ fontSize: 12, color: "#F57F17", textAlign: "center", padding: "10px 0", opacity: 0.7, fontWeight: 600 }}>우측 상단의 추가 버튼을 눌러보세요!</div>}
       
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {wTodos.map(item => {
-          const isDone = !!(item.doneLog && item.doneLog[mk]);
+        {vis.map(item => {
+          const target = item.targetCount || 1;
+          const current = item.doneLog && item.doneLog[mk] === true ? 1 : (item.doneLog && item.doneLog[mk]) || 0;
+          const isDone = current >= target;
+
           return (
             <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px dashed rgba(245,127,23,0.3)" }}>
-              <input type="checkbox" checked={isDone} onChange={() => toggleWeeklyTodo(item.id, selDate)} style={{ width: 20, height: 20, accentColor: "#F57F17", cursor: "pointer", flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 14, color: isDone ? "#BDBDBD" : C.text, textDecoration: isDone ? "line-through" : "none", fontWeight: isDone ? 400 : 700 }}>
-                {item.title}
-              </span>
-              <button onClick={() => openEditWeekly(item)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#F57F17", padding: 0, opacity: .7 }}>✏️</button>
+              {target === 1 ? (
+                <input type="checkbox" checked={current >= 1} onChange={() => setWeeklyTodoCount(item.id, selDate, current >= 1 ? 0 : 1)} style={{ width: 20, height: 20, accentColor: "#F57F17", cursor: "pointer", flexShrink: 0 }} />
+              ) : (
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                  {Array.from({ length: target }).map((_, i) => (
+                    <div
+                      key={i}
+                      onClick={() => setWeeklyTodoCount(item.id, selDate, current === i + 1 ? i : i + 1)}
+                      style={{ width: 16, height: 16, borderRadius: "50%", border: "2px solid #F57F17", background: i < current ? "#F57F17" : C.white, cursor: "pointer", transition: "all 0.2s" }}
+                    />
+                  ))}
+                </div>
+              )}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+                <span style={{ fontSize: 14, color: isDone ? "#BDBDBD" : C.text, textDecoration: isDone ? "line-through" : "none", fontWeight: isDone ? 400 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {item.title}
+                </span>
+                {target > 1 && !isDone && <span style={{ fontSize: 10, color: "#F57F17", fontWeight: 800, background: "rgba(245,127,23,0.1)", padding: "1px 6px", borderRadius: 4 }}>{current}/{target}회</span>}
+              </div>
+              <button onClick={() => openEditWeekly(item)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#F57F17", padding: 0, opacity: .7, flexShrink: 0 }}>✏️</button>
             </div>
           );
         })}
@@ -488,7 +550,6 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
       .map(t => ({ ...t, catId: cat.id, catName: cat.name, catEmoji: cat.emoji, catColor: cat.color }))
   );
   
-  // 💡 이번 주 할 일 보관함 연동
   const weeklyArchived = (todos.weekly || []).filter(t => t.archived).map(t => ({
     ...t, catId: "weekly", catName: "이번 주 할 일", catEmoji: "🎯", catColor: "#F57F17"
   }));
@@ -550,7 +611,7 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
                         {item.startDate && !item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
                         {item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>🗓️ 기간 할일 · {item.startDate} ~ {item.endDate}</div>}
                         {item.doneLog && Object.keys(item.doneLog).length > 0 && (
-                          <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}일</div>
+                          <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}주/일</div>
                         )}
                       </div>
                       <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -684,8 +745,7 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
   );
 }
 
-// 💡 [새로운 기능] ListView에 이번 주 할 일 컴포넌트 추가
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, toggleWeeklyTodo, openAddWeekly, openEditWeekly}) {
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, setWeeklyTodoCount, openAddWeekly, openEditWeekly}) {
   const dragItem = useRef();
   const dragOverItem = useRef();
 
@@ -730,8 +790,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
         </div>
       </div>
       
-      {/* 💡 [새로운 기능] 이번 주 할 일 표시 */}
-      <WeeklyPlanBox selDate={selDate} todos={todos} toggleWeeklyTodo={toggleWeeklyTodo} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
+      <WeeklyPlanBox selDate={selDate} todos={todos} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
 
       <div style={{fontSize:11,color:C.sub,marginBottom:10,display:"flex",alignItems:"center",gap:4}}>
         <span>💡 팁: 분류 이름(상단 영역)을 마우스로 드래그하면 원하는 순서대로 위치를 바꿀 수 있어요!</span>
@@ -790,8 +849,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
   );
 }
 
-// 💡 [새로운 기능] TodayMobileView에 이번 주 할 일 컴포넌트 추가
-function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, hideCompleted, setHideCompleted, cloudCode, toggleWeeklyTodo, openAddWeekly, openEditWeekly}) {
+function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, hideCompleted, setHideCompleted, cloudCode, setWeeklyTodoCount, openAddWeekly, openEditWeekly}) {
   const evs=eventsOn(selDate);
   return (
     <div style={{flex:1,overflow:"auto",padding:"14px 14px 80px"}}>
@@ -809,8 +867,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
         <div style={{background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"7px 12px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:12}}>{cloudCode?"☁️ 연동중":"⚠️ 로컬"}</div>
       </div>
       
-      {/* 💡 [새로운 기능] 모바일 오늘 탭 이번 주 할 일 표시 */}
-      <WeeklyPlanBox selDate={selDate} todos={todos} toggleWeeklyTodo={toggleWeeklyTodo} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
+      <WeeklyPlanBox selDate={selDate} todos={todos} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
 
       {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.repeatMonthly&&"🔁 "}{e.title}</div><div style={{fontSize:11,color:C.sub}}>{isMulti ? `${e.date.slice(5).replace("-","/")} ~ ${e.endDate.slice(5).replace("-","/")}${e.time ? " ("+e.time+")" : ""}` : (e.repeatMonthly?"매월 고정":(e.time||"종일"))}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
@@ -1009,13 +1066,11 @@ export default function App() {
     const cleaned = {};
     Object.keys(loaded).forEach(cid=>{
       cleaned[cid] = (loaded[cid]||[]).map(t=>{
-        // 이번 주 할 일 (weekly) 배열 처리 방어 코드
         if (cid === "weekly") return t; 
         const type = t.date ? "single" : t.endDate ? "period" : "routine";
         return cleanTodoItem(t, type);
       });
     });
-    // weekly 초기값이 없으면 넣어주기
     if (!cleaned.weekly) cleaned.weekly = INIT_TODOS.weekly;
     return cleaned;
   });
@@ -1028,9 +1083,10 @@ export default function App() {
   const [memoInput, setMemoInput] =useState("");
   const cardRef=useRef(null);
   
-  // 💡 [새로운 기능] 이번 주 할 일 모달 상태
-  const [weeklyModal, setWeeklyModal] = useState(null); // null | {mode: 'add'} | {mode: 'edit', item}
+  const [weeklyModal, setWeeklyModal] = useState(null); 
   const [weeklyFormTitle, setWeeklyFormTitle] = useState("");
+  // 💡 [업데이트] 주간 횟수 지정을 위한 새로운 상태
+  const [weeklyFormTarget, setWeeklyFormTarget] = useState(1);
 
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
@@ -1101,8 +1157,8 @@ export default function App() {
   const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   triggerAutoSave(); };
   const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  triggerAutoSave(); };
 
-  // 💡 [새로운 기능] 이번 주 할 일 조작 함수들
-  function toggleWeeklyTodo(id, ds) {
+  // 💡 [업데이트] 주 N회 설정을 지원하는 횟수 카운팅 함수
+  function setWeeklyTodoCount(id, ds, count) {
     const mk = getMonday(ds);
     setTodosS(p => {
       const w = p.weekly || [];
@@ -1111,7 +1167,8 @@ export default function App() {
         weekly: w.map(t => {
           if (t.id !== id) return t;
           const log = { ...(t.doneLog || {}) };
-          if (log[mk]) delete log[mk]; else log[mk] = true;
+          if (count > 0) log[mk] = count;
+          else delete log[mk]; // 0회면 기록 삭제
           return { ...t, doneLog: log };
         })
       };
@@ -1120,23 +1177,25 @@ export default function App() {
 
   function openAddWeekly() {
     setWeeklyFormTitle("");
+    setWeeklyFormTarget(1);
     setWeeklyModal({ mode: "add" });
   }
 
   function openEditWeekly(item) {
     setWeeklyFormTitle(item.title);
+    setWeeklyFormTarget(item.targetCount || 1);
     setWeeklyModal({ mode: "edit", item });
   }
 
   function saveWeekly() {
     if (!weeklyFormTitle.trim()) return;
     if (weeklyModal.mode === "add") {
-      const newItem = { id: genId(), title: weeklyFormTitle.trim(), doneLog: {} };
+      const newItem = { id: genId(), title: weeklyFormTitle.trim(), targetCount: weeklyFormTarget, doneLog: {} };
       setTodosS(p => ({ ...p, weekly: [...(p.weekly || []), newItem] }));
     } else {
       setTodosS(p => ({
         ...p,
-        weekly: (p.weekly || []).map(t => t.id === weeklyModal.item.id ? { ...t, title: weeklyFormTitle.trim() } : t)
+        weekly: (p.weekly || []).map(t => t.id === weeklyModal.item.id ? { ...t, title: weeklyFormTitle.trim(), targetCount: weeklyFormTarget } : t)
       }));
     }
     setWeeklyModal(null);
@@ -1331,8 +1390,7 @@ export default function App() {
   const cells=buildGrid(), weeks=weeksInMonth();
   const sideEvents=sideFilter==="all"?eventsOn(todayStr):eventsOn(todayStr).filter(e=>e.catId===sideFilter);
 
-  // 💡 [새로운 기능] props에 이번 주 할 일 관련 함수 추가
-  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, eventsOn, catById, hideCompleted, setHideCompleted, cloudCode, toggleWeeklyTodo, openAddWeekly, openEditWeekly };
+  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, eventsOn, catById, hideCompleted, setHideCompleted, cloudCode, setWeeklyTodoCount, openAddWeekly, openEditWeekly };
   const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone };
   const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
 
@@ -1357,7 +1415,7 @@ export default function App() {
               <button onClick={()=>openAddEvent(selDate)} style={{padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>🍅 추가</button>
             </div>
             {view==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} toggleWeeklyTodo={toggleWeeklyTodo} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
+            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
             {view==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
             {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
@@ -1376,7 +1434,7 @@ export default function App() {
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {mobileTab==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} toggleWeeklyTodo={toggleWeeklyTodo} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
@@ -1403,14 +1461,26 @@ export default function App() {
 
       {!isMobile&&<button onClick={()=>openAddEvent(selDate)} style={{position:"fixed",bottom:24,right:24,width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px ${C.rose}66`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:50}}>🍅</button>}
 
-      {/* 💡 [새로운 기능] 이번 주 할 일 전용 추가/편집 모달 */}
+      {/* 💡 [업데이트] 횟수 지정 기능이 추가된 이번 주 할 일 모달 */}
       {weeklyModal && (
         <ModalWrap onClose={() => setWeeklyModal(null)} isMobile={isMobile}>
           <div style={{fontSize:16, fontWeight:800, color:"#F57F17", marginBottom:16}}>🎯 이번 주 할 일 {weeklyModal.mode==="add"?"추가":"편집"}</div>
           <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>할 일 내용</label>
           <KoreanInput style={inp} placeholder="예: 이번 주에 화장실 청소하기" value={weeklyFormTitle} onChange={setWeeklyFormTitle} autoFocus/>
+          
+          <div style={{marginBottom: 16}}>
+            <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>목표 횟수 (이번 주에 몇 번 할까요?)</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {[1,2,3,4,5,6,7].map(n => (
+                <button key={n} onClick={()=>setWeeklyFormTarget(n)} style={{flex:1, minWidth:40, padding:"8px 0", borderRadius:10, border:`2px solid ${weeklyFormTarget===n?"#F57F17":C.border}`, background:weeklyFormTarget===n?"#FFF9C4":C.white, color:weeklyFormTarget===n?"#F57F17":C.sub, fontWeight:800, fontSize:13, cursor:"pointer"}}>
+                  {n}회
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{fontSize:11, color:C.sub, background:"#FFF9C4", padding:"10px 14px", borderRadius:10, marginBottom:16, lineHeight:1.5}}>
-            💡 한 번 추가해두면 <b>매주 자동으로</b> 나타나요!<br/>이번 주 안에 언제든 1번만 체크하면 달성 완료됩니다.
+            💡 한 번 추가해두면 <b>매주 자동으로</b> 나타나요!<br/>목표 횟수만큼 꾸준히 달성해 보세요!
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
             {weeklyModal.mode==="edit"&&<button onClick={()=>deleteWeekly(weeklyModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>}
