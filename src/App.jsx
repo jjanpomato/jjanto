@@ -19,6 +19,13 @@ const CAT_DEFAULTS = [
 const DAYS_KO   = ["일","월","화","수","목","금","토"];
 const MONTHS_KO = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 
+const WEEK_DAYS = [
+  { key:"mon", label:"월" }, { key:"tue", label:"화" }, { key:"wed", label:"수" },
+  { key:"thu", label:"목" }, { key:"fri", label:"금" }, { key:"sat", label:"토" }, { key:"sun", label:"일" },
+];
+const WEEKLY_ROW_COLORS = ["#FF85A1","#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC","#9575CD"];
+function emptyWeeklyCells() { return { mon:"", tue:"", wed:"", thu:"", fri:"", sat:"", sun:"" }; }
+
 function genId()     { return Math.random().toString(36).slice(2,9); }
 function fmtDate(d)  { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function isSame(a,b) { return fmtDate(new Date(a))===fmtDate(new Date(b)); }
@@ -188,113 +195,145 @@ const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,bo
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
 
 
-// 💡 [수정] 이번 주 할 일 박스: 과거 날짜(어제 포함)면 무조건 자동으로 접히도록 로직 완벽 수정!
-function WeeklyPlanBox({ selDate, todayStr, todos, setWeeklyTodoCount, openAddWeekly, openEditWeekly }) {
-  const [isCollapsed, setIsCollapsed] = useState(selDate < todayStr);
-  const [isHiding, setIsHiding] = useState(false);
+function WeeklyCheckbox({ checked, onToggle }) {
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        width: 20, height: 20, borderRadius: 6, cursor: "pointer", flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        border: checked ? "none" : `1.5px solid ${C.border}`,
+        background: checked ? C.rose : "transparent",
+        transition: "all .15s",
+      }}
+    >
+      {checked && <span style={{ color: C.white, fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    setIsCollapsed(selDate < todayStr);
-  }, [selDate, todayStr]);
+// 짠토의 성장일지: 요일별 표 형식 주간 할 일. 체크 상태는 주(월요일 키)별로 저장되어 매주 자동으로 리셋됨.
+function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow }) {
+  const [editMode, setEditMode] = useState(false);
+  const captureRef = useRef(null);
 
-  const wTodos = (todos.weekly || []).filter(t => !t.archived);
-  const mk = getMonday(selDate);
-  const rangeStr = getWeekRange(selDate); 
+  const rows = (todos.weeklyTable && todos.weeklyTable.rows) || [];
+  const weekKey = getMonday(selDate);
+  const rangeStr = getWeekRange(selDate);
 
-  let totalTargets = 0, totalDone = 0;
-  wTodos.forEach(t => {
-    const target = t.targetCount || 1;
-    totalTargets += target;
-    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
-    totalDone += Math.min(current, target);
+  let total = 0, done = 0;
+  rows.forEach(row => {
+    WEEK_DAYS.forEach(({ key }) => {
+      const text = (row.cells && row.cells[key]) || "";
+      if (!text.trim()) return;
+      total++;
+      if (row.checks && row.checks[weekKey] && row.checks[weekKey][key]) done++;
+    });
   });
-  const pct = totalTargets ? Math.round((totalDone / totalTargets) * 100) : 0;
+  const pct = total ? Math.round((done / total) * 100) : 0;
 
-  const hiddenCount = wTodos.filter(t => {
-    const target = t.targetCount || 1;
-    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
-    return current >= target;
-  }).length;
-
-  const vis = isHiding ? wTodos.filter(t => {
-    const target = t.targetCount || 1;
-    const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
-    return current < target;
-  }) : wTodos;
+  function handleSaveImage() {
+    const capture = () => {
+      const node = captureRef.current;
+      if (!node) return;
+      import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").then(() => {
+        window.html2canvas(node, { scale: 2, backgroundColor: "#FFFFFF" }).then(canvas => {
+          const a = document.createElement("a");
+          a.download = `짠토의_성장일지_${rangeStr.replace(/\s/g, "")}.png`;
+          a.href = canvas.toDataURL();
+          a.click();
+        });
+      }).catch(() => alert("이미지 저장에 실패했어요. 화면을 길게 눌러 캡처해봐요!"));
+    };
+    if (editMode) { setEditMode(false); setTimeout(capture, 50); } else { capture(); }
+  }
 
   return (
-    <div style={{ background: "linear-gradient(135deg, #FFF9C4, #FFF59D)", borderRadius: 16, padding: "14px 16px", border: "1.5px solid #FBC02D", marginBottom: 16, boxShadow: "0 2px 10px rgba(251,192,45,0.15)", transition: "all 0.3s" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isCollapsed ? 0 : 10 }}>
+    <div style={{ background: "linear-gradient(135deg,#FFF3F1,#FFE2D8)", borderRadius: 16, padding: "14px 16px", border: `1.5px solid ${C.border}`, marginBottom: 16, boxShadow: `0 2px 10px ${C.pink1}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 20 }}>🎯</span>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: "#F57F17", letterSpacing: "-0.5px" }}>이번 주 할 일</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#F57F17", opacity: 0.7, background: "rgba(245,127,23,0.1)", padding: "2px 6px", borderRadius: 6 }}>{rangeStr}</span>
-            </div>
-            {isCollapsed && totalTargets > 0 && (
-              <div style={{ fontSize: 11, color: "#F57F17", opacity: 0.9, marginTop: 2, fontWeight: 700 }}>
-                {totalDone}/{totalTargets}회 달성 ({pct}%)
-              </div>
-            )}
-          </div>
+          <span style={{ fontSize: 20 }}>🍅</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, letterSpacing: "-0.5px" }}>짠토의 성장일지</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.rose, opacity: 0.7, background: C.rose + "1A", padding: "2px 6px", borderRadius: 6 }}>{rangeStr}</span>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {!isCollapsed && hiddenCount > 0 && (
-            <button onClick={() => setIsHiding(!isHiding)} style={{ padding: "4px 8px", borderRadius: 99, border: `1.5px solid ${isHiding ? "#F57F17" : "#FBC02D"}`, background: isHiding ? "rgba(245,127,23,0.15)" : "rgba(255,255,255,0.5)", color: isHiding ? "#F57F17" : "#D84315", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
-              {isHiding ? `숨김(${hiddenCount})` : "숨김해제"}
-            </button>
-          )}
-          {!isCollapsed && <button onClick={openAddWeekly} style={{ background: "#F57F17", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13 }}>＋ 추가</button>}
-          <button onClick={() => setIsCollapsed(!isCollapsed)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#F57F17", opacity: 0.8 }}>
-            {isCollapsed ? "🔽" : "🔼"}
-          </button>
+        <button onClick={() => setEditMode(p => !p)} style={{ padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: editMode ? "#7EC8A4" : C.rose }}>
+          {editMode ? "완료" : "편집"}
+        </button>
+      </div>
+
+      <div ref={captureRef} style={{ background: C.white, borderRadius: 12, padding: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{ flex: 1, height: 6, borderRadius: 99, background: C.pink1, overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", borderRadius: 99, background: C.rose, transition: "width .5s" }} />
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 800, color: C.rose, minWidth: 32, textAlign: "right" }}>{pct}%</span>
+          <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{done}/{total} 완료</span>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 540 }}>
+            <thead>
+              <tr>
+                <th style={{ position: "sticky", left: 0, zIndex: 1, background: C.white, minWidth: 90, padding: "6px 8px", fontSize: 12, color: C.sub, textAlign: "left", borderBottom: `1.5px solid ${C.border}` }} />
+                {WEEK_DAYS.map(d => (
+                  <th key={d.key} style={{ minWidth: 72, padding: "6px 4px", fontSize: 12, fontWeight: 800, color: C.sub, borderBottom: `1.5px solid ${C.border}` }}>{d.label}</th>
+                ))}
+                {editMode && <th style={{ width: 28, borderBottom: `1.5px solid ${C.border}` }} />}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.id}>
+                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "6px 8px", borderBottom: `1px dashed ${C.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
+                      {editMode ? (
+                        <KoreanInput key={"rowlabel-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(row.id, v)} style={{ width: 66, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                      ) : (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</span>
+                      )}
+                    </div>
+                  </td>
+                  {WEEK_DAYS.map(d => {
+                    const text = (row.cells && row.cells[d.key]) || "";
+                    const checked = !!(row.checks && row.checks[weekKey] && row.checks[weekKey][d.key]);
+                    return (
+                      <td key={d.key} style={{ padding: "6px 4px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "top" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(row.id, d.key, selDate)} />
+                          {editMode ? (
+                            <KoreanInput key={"cell-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(row.id, d.key, v)} placeholder="-" style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 11, textAlign: "center", outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                          ) : (
+                            <span style={{ fontSize: 11, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 60, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text || "-"}</span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                  {editMode && (
+                    <td style={{ textAlign: "center", verticalAlign: "middle", borderBottom: `1px dashed ${C.border}` }}>
+                      <button onClick={() => removeWeeklyRow(row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={editMode ? 9 : 8} style={{ textAlign: "center", padding: "16px 0", fontSize: 12, color: C.sub }}>
+                    {editMode ? "아래 ＋ 행 추가 버튼으로 첫 항목을 만들어봐요!" : "편집 버튼을 눌러 항목을 추가해봐요 🍅"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
-      
-      {!isCollapsed && (
-        <>
-          {wTodos.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, height: 6, borderRadius: 99, background: "#FFF0B3", overflow: "hidden" }}>
-                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 99, background: "#F57F17", transition: "width .5s" }}/>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 800, color: "#F57F17", minWidth: 32, textAlign:"right" }}>{pct}%</span>
-            </div>
-          )}
-          
-          {wTodos.length === 0 && <div style={{ fontSize: 12, color: "#F57F17", textAlign: "center", padding: "10px 0", opacity: 0.7, fontWeight: 600 }}>우측 상단의 추가 버튼을 눌러보세요!</div>}
-          
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {vis.map(item => {
-              const target = item.targetCount || 1;
-              const current = item.doneLog && item.doneLog[mk] === true ? 1 : (item.doneLog && item.doneLog[mk]) || 0;
-              const isDone = current >= target;
 
-              return (
-                <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px dashed rgba(245,127,23,0.3)" }}>
-                  {target === 1 ? (
-                    <div onClick={() => setWeeklyTodoCount(item.id, selDate, current >= 1 ? 0 : 1)} style={{ fontSize: 20, cursor: "pointer", opacity: current >= 1 ? 1 : 0.2, filter: current >= 1 ? "none" : "grayscale(100%)", flexShrink: 0, transition: "all 0.2s" }}>🍅</div>
-                  ) : (
-                    <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                      {Array.from({ length: target }).map((_, i) => (
-                        <div key={i} onClick={() => setWeeklyTodoCount(item.id, selDate, current === i + 1 ? i : i + 1)} style={{ fontSize: 16, cursor: "pointer", transition: "all 0.2s", opacity: i < current ? 1 : 0.2, filter: i < current ? "none" : "grayscale(100%)" }}>🍅</div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
-                    <span style={{ fontSize: 14, color: isDone ? "#BDBDBD" : C.text, textDecoration: isDone ? "line-through" : "none", fontWeight: isDone ? 400 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {item.title}
-                    </span>
-                    {target > 1 && !isDone && <span style={{ fontSize: 10, color: "#F57F17", fontWeight: 800, background: "rgba(245,127,23,0.1)", padding: "1px 6px", borderRadius: 4 }}>{current}/{target}회</span>}
-                  </div>
-                  <button onClick={() => openEditWeekly(item)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#F57F17", padding: 0, opacity: .7, flexShrink: 0 }}>✏️</button>
-                </div>
-              );
-            })}
-          </div>
-        </>
+      {editMode && (
+        <button onClick={addWeeklyRow} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 행 추가</button>
       )}
+
+      <button onClick={handleSaveImage} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 이미지로 저장</button>
     </div>
   );
 }
@@ -338,13 +377,15 @@ function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m, todayStr })
   const tc = pct === 100 ? 3 : (pct !== null && pct >= 70 ? 2 : 1);
 
   const mk = week.monStr;
-  const wTodos = (todos.weekly || []).filter(t => !t.archived); 
+  const wRows = (todos.weeklyTable && todos.weeklyTable.rows) || [];
   let wTarget = 0, wDone = 0;
-  wTodos.forEach(t => {
-      const target = t.targetCount || 1;
-      wTarget += target;
-      const current = t.doneLog && t.doneLog[mk] === true ? 1 : (t.doneLog && t.doneLog[mk]) || 0;
-      wDone += Math.min(current, target);
+  wRows.forEach(row => {
+    WEEK_DAYS.forEach(({ key }) => {
+      const text = (row.cells && row.cells[key]) || "";
+      if (!text.trim()) return;
+      wTarget++;
+      if (row.checks && row.checks[mk] && row.checks[mk][key]) wDone++;
+    });
   });
   const wPct = wTarget > 0 ? Math.round((wDone / wTarget) * 100) : 0;
 
@@ -425,10 +466,10 @@ function WeekCard({ week, activeCats, todos, isDone, isMobile, y, m, todayStr })
               
               {wTarget > 0 && (
                 <div style={{display:"flex",alignItems:"center",gap:8, marginTop:4, paddingTop:10, borderTop:`1px dashed ${C.border}`}}>
-                  <span style={{fontSize:16,flexShrink:0}}>🎯</span>
-                  <span style={{fontSize:13,fontWeight:800,color:"#F57F17",minWidth:isMobile?38:52,flexShrink:0}}>이번 주 할 일</span>
-                  <Bar pct={wPct} color="#F57F17"/>
-                  <span style={{fontSize:13,fontWeight:800,color:"#F57F17",minWidth:32,textAlign:"right"}}>{wPct}%</span>
+                  <span style={{fontSize:16,flexShrink:0}}>🍅</span>
+                  <span style={{fontSize:13,fontWeight:800,color:C.rose,minWidth:isMobile?38:52,flexShrink:0}}>성장일지</span>
+                  <Bar pct={wPct} color={C.rose}/>
+                  <span style={{fontSize:13,fontWeight:800,color:C.rose,minWidth:32,textAlign:"right"}}>{wPct}%</span>
                   <span style={{fontSize:11,color:C.sub,minWidth:isMobile?30:38,textAlign:"right"}}>{wDone}/{wTarget}</span>
                 </div>
               )}
@@ -479,10 +520,7 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
       .map(t => ({ ...t, catId: cat.id, catName: cat.name, catEmoji: cat.emoji, catColor: cat.color }))
   );
   
-  const weeklyArchived = (todos.weekly || []).filter(t => t.archived).map(t => ({
-    ...t, catId: "weekly", catName: "이번 주 할 일", catEmoji: "🎯", catColor: "#F57F17"
-  }));
-  const allArchived = [...archivedItems, ...weeklyArchived];
+  const allArchived = archivedItems;
 
   function restore(catId, id) {
     setTodosS(p => ({ ...p, [catId]: p[catId].map(t => t.id===id ? { ...t, archived:false } : t) }));
@@ -492,11 +530,7 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
     setConfirmId(null);
   }
 
-  const byCatIds = [...cats.map(c=>c.id), "weekly"];
-  const byCat = byCatIds.map(cid => {
-    const cat = cid === "weekly" ? {id: "weekly", name: "이번 주 할 일", emoji: "🎯", color: "#F57F17"} : cats.find(c=>c.id===cid);
-    return { cat, items: allArchived.filter(t=>t.catId===cid) };
-  }).filter(g => g.items.length > 0);
+  const byCat = cats.map(cat => ({ cat, items: allArchived.filter(t=>t.catId===cat.id) })).filter(g => g.items.length > 0);
 
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
@@ -531,7 +565,7 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
                 {items.map(item => (
                   <div key={item.id}>
                     <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px dashed ${C.border}`}}>
-                      <span style={{fontSize:13,color:C.sub,flexShrink:0}}>{cat.id==="weekly"?"🎯":repeatIcon(item)}</span>
+                      <span style={{fontSize:13,color:C.sub,flexShrink:0}}>{repeatIcon(item)}</span>
                       <div style={{flex:1}}>
                         <div style={{fontSize:14,color:C.sub,textDecoration:"line-through",fontWeight:500}}>{item.title}</div>
                         {item.startDate && !item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
@@ -665,7 +699,7 @@ function MonthView({isMobile, cells, eventsOn, allTodosOn, selDate, todayStr, se
   );
 }
 
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, setWeeklyTodoCount, openAddWeekly, openEditWeekly}) {
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow}) {
   const dragItem = useRef();
   const dragOverItem = useRef();
 
@@ -710,7 +744,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
         </div>
       </div>
       
-      <WeeklyPlanBox selDate={selDate} todayStr={todayStr} todos={todos} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
+      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />
 
       <div style={{fontSize:11,color:C.sub,marginBottom:10,display:"flex",alignItems:"center",gap:4}}>
         <span>💡 팁: 분류 이름(상단 영역)을 마우스로 드래그하면 원하는 순서대로 위치를 바꿀 수 있어요!</span>
@@ -764,7 +798,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
   );
 }
 
-function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, hideCompleted, setHideCompleted, cloudCode, setWeeklyTodoCount, openAddWeekly, openEditWeekly}) {
+function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow}) {
   const evs=eventsOn(selDate);
   return (
     <div style={{flex:1,overflow:"auto",padding:"14px 14px 80px"}}>
@@ -782,7 +816,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, eventsOn, catById, allT
         <div style={{background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"7px 12px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:12}}>{cloudCode?"☁️ 연동중":"⚠️ 로컬"}</div>
       </div>
       
-      <WeeklyPlanBox selDate={selDate} todayStr={todayStr} todos={todos} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />
+      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />
 
       {evs.length>0&&<><div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>📅 일정</div>{evs.map(e=>{ const cat=catById(e.catId); const isMulti = e.endDate && e.endDate > e.date; return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.white,borderRadius:12,marginBottom:6,border:`1.5px solid ${e.color}33`,cursor:"pointer"}}><span style={{fontSize:18}}>{cat?.emoji||"📌"}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{e.repeatMonthly&&"🔁 "}{e.title}</div><div style={{fontSize:11,color:C.sub}}>{isMulti ? `${e.date.slice(5).replace("-","/")} ~ ${e.endDate.slice(5).replace("-","/")}${e.time ? " ("+e.time+")" : ""}` : (e.repeatMonthly?"매월 고정":(e.time||"종일"))}</div></div></div>; })}</>}
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
@@ -959,10 +993,6 @@ export default function App() {
   const [memoInput, setMemoInput] =useState("");
   const cardRef=useRef(null);
   
-  const [weeklyModal, setWeeklyModal] = useState(null); 
-  const [weeklyFormTitle, setWeeklyFormTitle] = useState("");
-  const [weeklyFormTarget, setWeeklyFormTarget] = useState(1);
-
   const [modal,  setModal] =useState(null);
   const [form,   setForm]  =useState({});
   const [todoModal, setTodoModal] =useState(null);
@@ -1014,42 +1044,36 @@ export default function App() {
   const setCatsS  =v=>{ const n=typeof v==="function"?v(cats):v;   setCats(n);   save("jjanto_cats",n);   triggerAutoSave(); };
   const setMemosS =v=>{ const n=typeof v==="function"?v(memos):v;  setMemos(n);  save("jjanto_memos",n);  triggerAutoSave(); };
 
-  function setWeeklyTodoCount(id, ds, count) {
-    const mk = getMonday(ds);
+  function addWeeklyRow() {
     setTodosS(p => {
-      const w = p.weekly || [];
-      return {
-        ...p,
-        weekly: w.map(t => {
-          if (t.id !== id) return t;
-          const log = { ...(t.doneLog || {}) };
-          if (count > 0) log[mk] = count;
-          else delete log[mk];
-          return { ...t, doneLog: log };
+      const rows = (p.weeklyTable && p.weeklyTable.rows) || [];
+      const color = WEEKLY_ROW_COLORS[rows.length % WEEKLY_ROW_COLORS.length];
+      const newRow = { id: genId(), label: "새 항목", color, cells: emptyWeeklyCells(), checks: {} };
+      return { ...p, weeklyTable: { rows: [...rows, newRow] } };
+    });
+  }
+  function updateWeeklyLabel(rowId, label) {
+    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => r.id === rowId ? { ...r, label } : r) } }));
+  }
+  function updateWeeklyCell(rowId, day, text) {
+    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => r.id === rowId ? { ...r, cells: { ...r.cells, [day]: text } } : r) } }));
+  }
+  function toggleWeeklyCheck(rowId, day, ds) {
+    const wk = getMonday(ds);
+    setTodosS(p => ({
+      ...p,
+      weeklyTable: {
+        rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => {
+          if (r.id !== rowId) return r;
+          const weekChecks = { ...(r.checks && r.checks[wk]) };
+          weekChecks[day] = !weekChecks[day];
+          return { ...r, checks: { ...r.checks, [wk]: weekChecks } };
         })
-      };
-    });
+      }
+    }));
   }
-
-  function openAddWeekly() { setWeeklyFormTitle(""); setWeeklyFormTarget(1); setWeeklyModal({ mode: "add" }); }
-  function openEditWeekly(item) { setWeeklyFormTitle(item.title); setWeeklyFormTarget(item.targetCount || 1); setWeeklyModal({ mode: "edit", item }); }
-  function saveWeekly() {
-    if (!weeklyFormTitle.trim()) return;
-    if (weeklyModal.mode === "add") {
-      setTodosS(p => ({ ...p, weekly: [...(p.weekly || []), { id: genId(), title: weeklyFormTitle.trim(), targetCount: weeklyFormTarget, doneLog: {} }] }));
-    } else {
-      setTodosS(p => ({ ...p, weekly: (p.weekly || []).map(t => t.id === weeklyModal.item.id ? { ...t, title: weeklyFormTitle.trim(), targetCount: weeklyFormTarget } : t) }));
-    }
-    setWeeklyModal(null);
-  }
-  function deleteWeekly(id) {
-    setTodosS(p => {
-      const w = p.weekly || [];
-      const item = w.find(t => t.id === id);
-      if (item && Object.keys(item.doneLog || {}).length > 0) return { ...p, weekly: w.map(t => t.id === id ? { ...t, archived: true } : t) };
-      return { ...p, weekly: w.filter(t => t.id !== id) };
-    });
-    setWeeklyModal(null);
+  function removeWeeklyRow(rowId) {
+    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).filter(r => r.id !== rowId) } }));
   }
 
   function handleMoveCat(fromIndex, toIndex) {
@@ -1143,7 +1167,7 @@ export default function App() {
   const weeksList = getWeeksInMonth(curDate.getFullYear(), curDate.getMonth());
   const sideEvents=sideFilter==="all"?eventsOn(todayStr):eventsOn(todayStr).filter(e=>e.catId===sideFilter);
 
-  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, eventsOn, catById, hideCompleted, setHideCompleted, cloudCode, setWeeklyTodoCount, openAddWeekly, openEditWeekly };
+  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, openAddEvent, eventsOn, catById, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow };
   const weeklyProps = { isMobile, curDate, setCurDate, todos, activeCats, isDone, todayStr };
   const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
 
@@ -1168,7 +1192,7 @@ export default function App() {
               <button onClick={()=>openAddEvent(selDate)} style={{padding:"7px 16px",borderRadius:20,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontWeight:800,fontSize:13,cursor:"pointer"}}>🍅 추가</button>
             </div>
             {view==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
+            {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />}
             {view==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
             {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
@@ -1187,7 +1211,7 @@ export default function App() {
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
             {mobileTab==="month"&&<MonthView isMobile={isMobile} cells={cells} eventsOn={eventsOn} allTodosOn={allTodosOn} selDate={selDate} todayStr={todayStr} setSelDate={setSelDate} setMobileTab={setMobileTab} openEditEvent={openEditEvent}/>}
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} setWeeklyTodoCount={setWeeklyTodoCount} openAddWeekly={openAddWeekly} openEditWeekly={openEditWeekly} />}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="weekly"&&<WeeklyView {...weeklyProps}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
@@ -1213,32 +1237,6 @@ export default function App() {
       )}
 
       {!isMobile&&<button onClick={()=>openAddEvent(selDate)} style={{position:"fixed",bottom:24,right:24,width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white,border:"none",fontSize:26,cursor:"pointer",boxShadow:`0 4px 20px ${C.rose}66`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:50}}>🍅</button>}
-
-      {weeklyModal && (
-        <ModalWrap onClose={() => setWeeklyModal(null)} isMobile={isMobile}>
-          <div style={{fontSize:16, fontWeight:800, color:"#F57F17", marginBottom:16}}>🎯 이번 주 할 일 {weeklyModal.mode==="add"?"추가":"편집"}</div>
-          <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>할 일 내용</label>
-          <KoreanInput style={inp} placeholder="예: 이번 주에 화장실 청소하기" value={weeklyFormTitle} onChange={setWeeklyFormTitle} autoFocus/>
-          <div style={{marginBottom: 16}}>
-            <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>목표 횟수 (이번 주에 몇 번 할까요?)</label>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {[1,2,3,4,5,6,7].map(n => (
-                <button key={n} onClick={()=>setWeeklyFormTarget(n)} style={{flex:1, minWidth:40, padding:"8px 0", borderRadius:10, border:`2px solid ${weeklyFormTarget===n?"#F57F17":C.border}`, background:weeklyFormTarget===n?"#FFF9C4":C.white, color:weeklyFormTarget===n?"#F57F17":C.sub, fontWeight:800, fontSize:13, cursor:"pointer"}}>
-                  {n}회
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{fontSize:11, color:C.sub, background:"#FFF9C4", padding:"10px 14px", borderRadius:10, marginBottom:16, lineHeight:1.5}}>
-            💡 한 번 추가해두면 <b>매주 자동으로</b> 나타나요!<br/>목표 횟수만큼 꾸준히 달성해 보세요!
-          </div>
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
-            {weeklyModal.mode==="edit"&&<button onClick={()=>deleteWeekly(weeklyModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>}
-            <button onClick={()=>setWeeklyModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
-            <button onClick={saveWeekly} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:"#F57F17",color:C.white}}>저장</button>
-          </div>
-        </ModalWrap>
-      )}
 
       {(modal==="addEvent"||modal==="editEvent")&&(
         <ModalWrap onClose={()=>setModal(null)} isMobile={isMobile}>
