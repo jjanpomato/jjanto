@@ -502,7 +502,8 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
 }
 
 
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isDone, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, cats, showCat, isRestDay, toggleRestDay}) {
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isDone, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, cats, showCat, deleteCat, isRestDay, toggleRestDay}) {
+  const [confirmDeleteCatId, setConfirmDeleteCatId] = useState(null);
   const dragItem = useRef();
   const dragOverItem = useRef();
 
@@ -616,7 +617,19 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
           <div style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6}}>숨긴 분류</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {cats.filter(c=>c.hidden).map(c=>(
-              <button key={c.id} onClick={()=>showCat(c.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:99,background:C.white,border:`1.5px solid ${C.border}`,cursor:"pointer",fontSize:12,color:C.sub,fontWeight:700}}>{c.emoji} {c.name}<span style={{color:C.rose}}>복원</span></button>
+              confirmDeleteCatId===c.id ? (
+                <div key={c.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:99,background:"#FFF0F0",border:"1.5px solid #FFB3B3"}}>
+                  <span style={{fontSize:11,color:"#E63946",fontWeight:700}}>{c.emoji} {c.name} 영구 삭제할까요?</span>
+                  <button onClick={()=>{deleteCat(c.id);setConfirmDeleteCatId(null);}} style={{background:"#E63946",color:"white",border:"none",borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer"}}>삭제</button>
+                  <button onClick={()=>setConfirmDeleteCatId(null)} style={{background:C.pink1,color:C.sub,border:"none",borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer"}}>취소</button>
+                </div>
+              ) : (
+                <div key={c.id} style={{display:"flex",alignItems:"center",gap:2,padding:"4px 4px 4px 12px",borderRadius:99,background:C.white,border:`1.5px solid ${C.border}`,fontSize:12,color:C.sub,fontWeight:700}}>
+                  <span>{c.emoji} {c.name}</span>
+                  <button onClick={()=>showCat(c.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:C.rose,fontWeight:700,padding:"4px 8px"}}>복원</button>
+                  <button onClick={()=>setConfirmDeleteCatId(c.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#E63946",fontWeight:700,padding:"4px 8px"}}>삭제</button>
+                </div>
+              )
             ))}
           </div>
         </div>
@@ -954,6 +967,7 @@ export default function App() {
   function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
   function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
+  function deleteCat(id){ setCatsS(p=>p.filter(c=>c.id!==id)); setTodosS(p=>{ const n={...p}; delete n[id]; return n; }); }
 
   const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, isRestDay, toggleRestDay };
   const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
@@ -976,7 +990,7 @@ export default function App() {
               <button key={v} onClick={()=>setView(v)} style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${view===v?C.rose:C.border}`,background:view===v?C.rose:C.white,color:view===v?C.white:C.sub,fontSize:12,cursor:"pointer",fontWeight:700}}>{lb}</button>
             ))}
           </div>
-          {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
+          {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
           {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
           {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
         </div>
@@ -989,7 +1003,7 @@ export default function App() {
             {cloudBadge}
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
             {mobileTab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
