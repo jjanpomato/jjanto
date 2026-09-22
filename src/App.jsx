@@ -975,13 +975,15 @@ export default function App() {
     const loaded = load("jjanto_todos", INIT_TODOS);
     const cleaned = {};
     Object.keys(loaded).forEach(cid=>{
+      if (cid === "weeklyTable") { cleaned[cid] = loaded[cid]; return; }
       cleaned[cid] = (loaded[cid]||[]).map(t=>{
-        if (cid === "weekly") return t; 
+        if (cid === "weekly") return t;
         const type = t.date ? "single" : t.endDate ? "period" : "routine";
         return cleanTodoItem(t, type);
       });
     });
     if (!cleaned.weekly) cleaned.weekly = INIT_TODOS.weekly;
+    if (!cleaned.weeklyTable) cleaned.weeklyTable = { rows: [] };
     return cleaned;
   });
   const [cats,      setCats]      = useState(()=>load("jjanto_cats",  CAT_DEFAULTS));
