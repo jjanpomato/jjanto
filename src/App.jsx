@@ -25,6 +25,35 @@ const WEEK_DAYS = [
 const WEEKLY_ROW_COLORS = ["#FF85A1","#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC","#9575CD"];
 function emptyWeeklyCells() { return { mon:"", tue:"", wed:"", thu:"", fri:"", sat:"", sun:"" }; }
 
+// 성장일지는 weeklyTable.weeks[월요일 날짜] = { rows } 형태로 주마다 따로 저장돼요.
+// 예전 방식(weeklyTable.rows 하나를 모든 주가 공유)은 migrateWeeklyTable에서 주별 데이터로 옮겨줘요.
+function getWeekRows(table, wk) {
+  const week = table && table.weeks && table.weeks[wk];
+  return (week && week.rows) || [];
+}
+function hasWeekData(table, wk) {
+  return getWeekRows(table, wk).length > 0;
+}
+// wk보다 이전 주 중에서 내용이 있는 가장 최근 주의 키를 찾아요 (없으면 null)
+function findPrevWeekKey(table, wk) {
+  const keys = Object.keys((table && table.weeks) || {}).filter(k => k < wk && hasWeekData(table, k)).sort();
+  return keys.length ? keys[keys.length - 1] : null;
+}
+function migrateWeeklyTable(table, todayStr) {
+  if (!table || !Array.isArray(table.rows) || table.rows.length === 0) return null;
+  const legacyRows = table.rows;
+  const thisWk = getMonday(todayStr);
+  const next = new Date(thisWk); next.setDate(next.getDate() + 7);
+  const targetWeeks = new Set([thisWk, fmtDate(next)]);
+  legacyRows.forEach(r => Object.keys(r.checks || {}).forEach(wk => targetWeeks.add(wk)));
+  const weeks = { ...(table.weeks || {}) };
+  targetWeeks.forEach(wk => {
+    if (hasWeekData({ weeks }, wk)) return;
+    weeks[wk] = { rows: legacyRows.map(r => ({ id: r.id, label: r.label, color: r.color, cells: { ...emptyWeeklyCells(), ...r.cells }, checks: { ...((r.checks && r.checks[wk]) || {}) } })) };
+  });
+  return { weeks };
+}
+
 function genId()     { return Math.random().toString(36).slice(2,9); }
 function fmtDate(d)  { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function isSame(a,b) { return fmtDate(new Date(a))===fmtDate(new Date(b)); }
@@ -196,12 +225,13 @@ function WeeklyCheckbox({ checked, onToggle }) {
 }
 
 // 짠토의 성장일지: 요일별 표 형식 주간 할 일. 체크 상태는 주(월요일 키)별로 저장되어 매주 자동으로 리셋됨.
-function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow }) {
+function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom }) {
   const [editMode, setEditMode] = useState(false);
   const captureRef = useRef(null);
 
-  const rows = (todos.weeklyTable && todos.weeklyTable.rows) || [];
   const weekKey = getMonday(selDate);
+  const rows = getWeekRows(todos.weeklyTable, weekKey);
+  const prevWeekKey = findPrevWeekKey(todos.weeklyTable, weekKey);
   const rangeStr = getWeekRange(selDate);
 
   let total = 0, done = 0;
@@ -210,7 +240,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
       const text = (row.cells && row.cells[key]) || "";
       if (!text.trim()) return;
       total++;
-      if (row.checks && row.checks[weekKey] && row.checks[weekKey][key]) done++;
+      if (row.checks && row.checks[key]) done++;
     });
   });
   const pct = total ? Math.round((done / total) * 100) : 0;
@@ -271,7 +301,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
                       {editMode ? (
-                        <KoreanInput key={"rowlabel-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(row.id, v)} style={{ width: 66, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                        <KoreanInput key={"rowlabel-" + weekKey + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(weekKey, row.id, v)} style={{ width: 66, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
                       ) : (
                         <span style={{ fontSize: 12, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</span>
                       )}
@@ -279,13 +309,13 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
                   </td>
                   {WEEK_DAYS.map(d => {
                     const text = (row.cells && row.cells[d.key]) || "";
-                    const checked = !!(row.checks && row.checks[weekKey] && row.checks[weekKey][d.key]);
+                    const checked = !!(row.checks && row.checks[d.key]);
                     return (
                       <td key={d.key} style={{ padding: "6px 4px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "top" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(row.id, d.key, selDate)} />
+                          <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(weekKey, row.id, d.key)} />
                           {editMode ? (
-                            <KoreanInput key={"cell-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(row.id, d.key, v)} placeholder="-" style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 11, textAlign: "center", outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                            <KoreanInput key={"cell-" + weekKey + "-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(weekKey, row.id, d.key, v)} placeholder="-" style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 11, textAlign: "center", outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
                           ) : (
                             <span style={{ fontSize: 11, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 60, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text || "-"}</span>
                           )}
@@ -295,7 +325,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
                   })}
                   {editMode && (
                     <td style={{ textAlign: "center", verticalAlign: "middle", borderBottom: `1px dashed ${C.border}` }}>
-                      <button onClick={() => removeWeeklyRow(row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                      <button onClick={() => removeWeeklyRow(weekKey, row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
                     </td>
                   )}
                 </tr>
@@ -303,7 +333,13 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={editMode ? 9 : 8} style={{ textAlign: "center", padding: "16px 0", fontSize: 12, color: C.sub }}>
-                    {editMode ? "아래 ＋ 행 추가 버튼으로 첫 항목을 만들어봐요!" : "편집 버튼을 눌러 항목을 추가해봐요 🍅"}
+                    {editMode ? "아래 ＋ 행 추가 버튼으로 첫 항목을 만들어봐요!" : "이번 주 계획이 아직 없어요. 편집을 눌러 새로 만들거나 지난 계획을 불러와봐요 🍅"}
+                    {prevWeekKey && (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
+                        <button onClick={() => copyWeekFrom(prevWeekKey, weekKey, false)} style={{ padding: "6px 10px", borderRadius: 8, border: `1.5px solid ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>📋 지난 항목만 가져오기</button>
+                        <button onClick={() => copyWeekFrom(prevWeekKey, weekKey, true)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: C.rose, color: C.white, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>📋 내용까지 그대로 복사</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               )}
@@ -313,7 +349,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
       </div>
 
       {editMode && (
-        <button onClick={addWeeklyRow} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 행 추가</button>
+        <button onClick={() => addWeeklyRow(weekKey)} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 행 추가</button>
       )}
 
       <button onClick={handleSaveImage} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 이미지로 저장</button>
@@ -502,7 +538,7 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
 }
 
 
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isDone, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, cats, showCat, deleteCat, isRestDay, toggleRestDay}) {
+function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isDone, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, cats, showCat, deleteCat, isRestDay, toggleRestDay}) {
   const [confirmDeleteCatId, setConfirmDeleteCatId] = useState(null);
   const dragItem = useRef();
   const dragOverItem = useRef();
@@ -561,7 +597,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
 
       <WeeklyStatsCard selDate={selDate} activeCats={activeCats} todos={todos} isDone={isDone} todayStr={todayStr} isRestDay={isRestDay}/>
 
-      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />
+      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} />
 
       <div style={{fontSize:11,color:C.sub,marginBottom:10,display:"flex",alignItems:"center",gap:4}}>
         <span>💡 팁: 분류 이름(상단 영역)을 마우스로 드래그하면 원하는 순서대로 위치를 바꿀 수 있어요!</span>
@@ -638,7 +674,7 @@ function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPct
   );
 }
 
-function TodayMobileView({selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, isRestDay, toggleRestDay}) {
+function TodayMobileView({selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, isRestDay, toggleRestDay}) {
   return (
     <div style={{flex:1,overflow:"auto",padding:"14px 14px 80px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
@@ -663,7 +699,7 @@ function TodayMobileView({selDate, setSelDate, todayStr, allTodosOn, totalPctOn,
         </div>
       )}
 
-      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} />
+      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} />
 
       <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
       {activeCats.map(cat=>{
@@ -835,7 +871,7 @@ export default function App() {
       });
     });
     if (!cleaned.weekly) cleaned.weekly = INIT_TODOS.weekly;
-    if (!cleaned.weeklyTable) cleaned.weeklyTable = { rows: [] };
+    if (!cleaned.weeklyTable) cleaned.weeklyTable = { weeks: {} };
     return cleaned;
   });
   const [cats,      setCats]      = useState(()=>load("jjanto_cats",  CAT_DEFAULTS));
@@ -894,38 +930,43 @@ export default function App() {
   const setMemosS   =v=>{ const n=typeof v==="function"?v(memos):v;    setMemos(n);    save("jjanto_memos",n);     triggerAutoSave(); };
   const setRestDaysS=v=>{ const n=typeof v==="function"?v(restDays):v; setRestDays(n); save("jjanto_rest_days",n); triggerAutoSave(); };
   const isRestDay = ds => restDays.includes(ds);
+
+  // 예전처럼 모든 주가 한 표를 공유하던 성장일지 데이터가 있으면(로컬이든 클라우드든) 주별 저장으로 한 번 옮겨줘요
+  useEffect(() => {
+    const migrated = migrateWeeklyTable(todos.weeklyTable, todayStr);
+    if (migrated) setTodosS(p => ({ ...p, weeklyTable: migrated }));
+  }, [todos.weeklyTable]);
   function toggleRestDay(ds) { setRestDaysS(p => p.includes(ds) ? p.filter(d=>d!==ds) : [...p, ds]); }
 
-  function addWeeklyRow() {
+  // 성장일지 행 수정 헬퍼: 해당 주(wk)의 rows만 바꾸고 다른 주 내용은 그대로 둬요
+  function updateWeekRows(wk, fn) {
     setTodosS(p => {
-      const rows = (p.weeklyTable && p.weeklyTable.rows) || [];
-      const color = WEEKLY_ROW_COLORS[rows.length % WEEKLY_ROW_COLORS.length];
-      const newRow = { id: genId(), label: "새 항목", color, cells: emptyWeeklyCells(), checks: {} };
-      return { ...p, weeklyTable: { rows: [...rows, newRow] } };
+      const table = p.weeklyTable || {};
+      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { rows: fn(getWeekRows(table, wk)) } } } };
     });
   }
-  function updateWeeklyLabel(rowId, label) {
-    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => r.id === rowId ? { ...r, label } : r) } }));
+  function addWeeklyRow(wk) {
+    updateWeekRows(wk, rows => {
+      const color = WEEKLY_ROW_COLORS[rows.length % WEEKLY_ROW_COLORS.length];
+      return [...rows, { id: genId(), label: "새 항목", color, cells: emptyWeeklyCells(), checks: {} }];
+    });
   }
-  function updateWeeklyCell(rowId, day, text) {
-    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => r.id === rowId ? { ...r, cells: { ...r.cells, [day]: text } } : r) } }));
+  function updateWeeklyLabel(wk, rowId, label) {
+    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, label } : r));
   }
-  function toggleWeeklyCheck(rowId, day, ds) {
-    const wk = getMonday(ds);
-    setTodosS(p => ({
-      ...p,
-      weeklyTable: {
-        rows: ((p.weeklyTable && p.weeklyTable.rows) || []).map(r => {
-          if (r.id !== rowId) return r;
-          const weekChecks = { ...(r.checks && r.checks[wk]) };
-          weekChecks[day] = !weekChecks[day];
-          return { ...r, checks: { ...r.checks, [wk]: weekChecks } };
-        })
-      }
-    }));
+  function updateWeeklyCell(wk, rowId, day, text) {
+    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, cells: { ...r.cells, [day]: text } } : r));
   }
-  function removeWeeklyRow(rowId) {
-    setTodosS(p => ({ ...p, weeklyTable: { rows: ((p.weeklyTable && p.weeklyTable.rows) || []).filter(r => r.id !== rowId) } }));
+  function toggleWeeklyCheck(wk, rowId, day) {
+    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, checks: { ...r.checks, [day]: !(r.checks && r.checks[day]) } } : r));
+  }
+  function removeWeeklyRow(wk, rowId) {
+    updateWeekRows(wk, rows => rows.filter(r => r.id !== rowId));
+  }
+  // 지난 주 계획을 이 주로 복사해요. withCells가 false면 항목 이름/색만 가져오고 칸은 비워둬요.
+  function copyWeekFrom(fromWk, toWk, withCells) {
+    const src = getWeekRows(todos.weeklyTable, fromWk);
+    updateWeekRows(toWk, () => src.map(r => ({ id: genId(), label: r.label, color: r.color, cells: withCells ? { ...emptyWeeklyCells(), ...r.cells } : emptyWeeklyCells(), checks: {} })));
   }
 
   function handleMoveCat(fromIndex, toIndex) {
@@ -969,7 +1010,7 @@ export default function App() {
   function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
   function deleteCat(id){ setCatsS(p=>p.filter(c=>c.id!==id)); setTodosS(p=>{ const n={...p}; delete n[id]; return n; }); }
 
-  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, isRestDay, toggleRestDay };
+  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, isRestDay, toggleRestDay };
   const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
 
   const cloudBadge = (
@@ -990,7 +1031,7 @@ export default function App() {
               <button key={v} onClick={()=>setView(v)} style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${view===v?C.rose:C.border}`,background:view===v?C.rose:C.white,color:view===v?C.white:C.sub,fontSize:12,cursor:"pointer",fontWeight:700}}>{lb}</button>
             ))}
           </div>
-          {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
+          {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
           {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
           {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
         </div>
@@ -1003,7 +1044,7 @@ export default function App() {
             {cloudBadge}
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
+            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
             {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
             {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
             {mobileTab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
