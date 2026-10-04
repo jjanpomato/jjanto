@@ -20,8 +20,9 @@ const DAYS_KO   = ["일","월","화","수","목","금","토"];
 
 const WEEK_DAYS = [
   { key:"mon", label:"월" }, { key:"tue", label:"화" }, { key:"wed", label:"수" },
-  { key:"thu", label:"목" }, { key:"fri", label:"금" }, { key:"sat", label:"토" }, { key:"sun", label:"일" },
+  { key:"thu", label:"목" }, { key:"fri", label:"금" },
 ];
+// 성장일지 표는 평일(월~금)만 보여줘요. 주말은 밀린 걸 채우는 보충 시간이에요.
 const WEEKLY_ROW_COLORS = ["#FF85A1","#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC","#9575CD"];
 function emptyWeeklyCells() { return { mon:"", tue:"", wed:"", thu:"", fri:"", sat:"", sun:"" }; }
 
@@ -284,7 +285,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 540 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 420 }}>
             <thead>
               <tr>
                 <th style={{ position: "sticky", left: 0, zIndex: 1, background: C.white, minWidth: 90, padding: "6px 8px", fontSize: 12, color: C.sub, textAlign: "left", borderBottom: `1.5px solid ${C.border}` }} />
@@ -332,7 +333,7 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={editMode ? 9 : 8} style={{ textAlign: "center", padding: "16px 0", fontSize: 12, color: C.sub }}>
+                  <td colSpan={editMode ? WEEK_DAYS.length + 2 : WEEK_DAYS.length + 1} style={{ textAlign: "center", padding: "16px 0", fontSize: 12, color: C.sub }}>
                     {editMode ? "아래 ＋ 행 추가 버튼으로 첫 항목을 만들어봐요!" : "이번 주 계획이 아직 없어요. 편집을 눌러 새로 만들거나 지난 계획을 불러와봐요 🍅"}
                     {prevWeekKey && (
                       <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
