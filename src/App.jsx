@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { pushPlannerData, pullPlannerData, subscribePlannerData } from "./firebase";
+import { pushPlannerData, subscribePlannerData } from "./firebase";
 
 const C = {
   bg:"#FFF8F6", pink1:"#FFE0D6", pink2:"#FFBCAA", pink3:"#FF7A5C",
   rose:"#E8392A", tomato:"#C0392B", text:"#2D1A14", sub:"#9A6A5A",
-  border:"#FFCFC4", white:"#FFFFFF",
+  border:"#FFCFC4", white:"#FFFFFF", green:"#7EC8A4",
 };
 
+// 예전 할일 기록(보관함)에서 분류 이름을 보여줄 때 써요
 const CAT_DEFAULTS = [
   { id:"work",    name:"회사",  emoji:"💼", color:"#FF85A1", hidden:false },
   { id:"economy", name:"경제",  emoji:"📈", color:"#FFB347", hidden:false },
@@ -22,79 +23,107 @@ const WEEK_DAYS = [
   { key:"mon", label:"월" }, { key:"tue", label:"화" }, { key:"wed", label:"수" },
   { key:"thu", label:"목" }, { key:"fri", label:"금" },
 ];
-// 성장일지 표는 평일(월~금)만 보여줘요. 주말은 밀린 걸 채우는 보충 시간이에요.
+// 주간 표와 달성률은 평일(월~금)만 봐요. 주말은 밀린 걸 채우는 보충데이라 계산에서 빠져요.
 const WEEKLY_ROW_COLORS = ["#FF85A1","#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC","#9575CD"];
 function emptyWeeklyCells() { return { mon:"", tue:"", wed:"", thu:"", fri:"", sat:"", sun:"" }; }
+const EMPTY_JJANTECH = { items: [], log: {} };
 
-// 성장일지는 weeklyTable.weeks[월요일 날짜] = { rows } 형태로 주마다 따로 저장돼요.
-// 예전 방식(weeklyTable.rows 하나를 모든 주가 공유)은 migrateWeeklyTable에서 주별 데이터로 옮겨줘요.
+// 주간 표는 weeklyTable.weeks[월요일 날짜] = { v:2, rows } 형태로 주마다 따로 저장돼요.
+// 행(row)은 { id, label, color, checks:{mon:true...}, off:{tue:true...} } 이고, off인 칸은 "이 날은 안 함"이라 달성률에서 빠져요.
 function getWeekRows(table, wk) {
   const week = table && table.weeks && table.weeks[wk];
-  return (week && week.rows) || [];
+  return (week && Array.isArray(week.rows)) ? week.rows : [];
 }
 function hasWeekData(table, wk) {
   return getWeekRows(table, wk).length > 0;
 }
-// wk보다 이전 주 중에서 내용이 있는 가장 최근 주의 키를 찾아요 (없으면 null)
 function findPrevWeekKey(table, wk) {
   const keys = Object.keys((table && table.weeks) || {}).filter(k => k < wk && hasWeekData(table, k)).sort();
   return keys.length ? keys[keys.length - 1] : null;
 }
+// 아주 예전 방식(weeklyTable.rows 하나를 모든 주가 공유)을 주별 데이터로 옮겨줘요
 function migrateWeeklyTable(table, todayStr) {
   if (!table || !Array.isArray(table.rows) || table.rows.length === 0) return null;
   const legacyRows = table.rows;
-  const thisWk = getMonday(todayStr);
-  const next = new Date(thisWk); next.setDate(next.getDate() + 7);
-  const targetWeeks = new Set([thisWk, fmtDate(next)]);
-  legacyRows.forEach(r => Object.keys(r.checks || {}).forEach(wk => targetWeeks.add(wk)));
+  const weekKeys = new Set();
+  legacyRows.forEach(r => Object.keys(r.checks || {}).forEach(k => weekKeys.add(k)));
+  if (weekKeys.size === 0) weekKeys.add(getMonday(todayStr));
   const weeks = { ...(table.weeks || {}) };
-  targetWeeks.forEach(wk => {
+  weekKeys.forEach(wk => {
     if (hasWeekData({ weeks }, wk)) return;
     weeks[wk] = { rows: legacyRows.map(r => ({ id: r.id, label: r.label, color: r.color, cells: { ...emptyWeeklyCells(), ...r.cells }, checks: { ...((r.checks && r.checks[wk]) || {}) } })) };
   });
   return { weeks };
 }
+// 예전 성장일지는 글자를 적은 칸만 달성률에 셌어요. 새 표는 모든 칸을 세니까,
+// 옛 주에서 글자를 하나라도 적은 행은 빈칸을 "안 함(off)"으로 바꿔서 예전 달성률이 그대로 나오게 해요.
+function migrateWeeklyOff(table) {
+  const weeks = (table && table.weeks) || {};
+  const oldKeys = Object.keys(weeks).filter(k => weeks[k] && weeks[k].v !== 2);
+  if (oldKeys.length === 0) return null;
+  const next = { ...weeks };
+  oldKeys.forEach(k => {
+    next[k] = { v: 2, rows: getWeekRows(table, k).map(r => {
+      const cells = r.cells || {};
+      const hasText = WEEK_DAYS.some(d => (cells[d.key] || "").trim());
+      if (!hasText) return r;
+      const off = { ...(r.off || {}) };
+      WEEK_DAYS.forEach(d => { if (!(cells[d.key] || "").trim()) off[d.key] = true; });
+      return { ...r, off };
+    }) };
+  });
+  return { ...table, weeks: next };
+}
 
 function genId()     { return Math.random().toString(36).slice(2,9); }
 function fmtDate(d)  { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
-function isSame(a,b) { return fmtDate(new Date(a))===fmtDate(new Date(b)); }
+function parseDate(ds) { const [y,m,d] = ds.split("-").map(Number); return new Date(y, m-1, d); }
+function addDays(ds, n) { const d = parseDate(ds); d.setDate(d.getDate() + n); return fmtDate(d); }
 
 function getMonday(ds) {
-  const d = new Date(ds);
+  const d = parseDate(ds);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const mon = new Date(d.setDate(diff));
-  return fmtDate(mon);
+  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+  return fmtDate(d);
+}
+function weekdayDates(wk) { return WEEK_DAYS.map((d, i) => ({ ...d, ds: addDays(wk, i) })); }
+function weekRangeLabel(wk) {
+  const mon = parseDate(wk), fri = parseDate(addDays(wk, 4));
+  return `${mon.getMonth()+1}/${mon.getDate()} ~ ${fri.getMonth()+1}/${fri.getDate()}`;
 }
 
-// selDate가 속한 주(월~일 7일)의 정보를 만들어요
-function getCurrentWeek(ds) {
-  const mon = new Date(ds);
-  const day = mon.getDay();
-  mon.setDate(mon.getDate() - day + (day === 0 ? -6 : 1));
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d2 = new Date(mon);
-    d2.setDate(mon.getDate() + i);
-    days.push(fmtDate(d2));
-  }
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+// 짠테크 항목은 추가한 날(since)부터 세요. 그래야 짠테크를 만들기 전 주의 달성률이 바뀌지 않아요.
+function jjItemsOn(jj, ds) { return ((jj && jj.items) || []).filter(it => !it.since || it.since <= ds); }
+
+// 한 주(월~금)의 일간·주간 달성률을 계산해요.
+// 표의 각 칸 + 짠테크 한 줄(그날 체크리스트를 전부 끝내야 완료)로 세고, 🌿쉼으로 표시한 날은 빼요.
+function computeWeekStats(table, jj, wk, isRestDay) {
+  const rows = getWeekRows(table, wk);
+  const days = weekdayDates(wk).map(d => {
+    const rest = isRestDay(d.ds);
+    const jjItems = jjItemsOn(jj, d.ds);
+    const dayLog = (jj && jj.log && jj.log[d.ds]) || {};
+    const jjDone = jjItems.filter(it => dayLog[it.id]).length;
+    let total = 0, done = 0;
+    if (!rest) {
+      rows.forEach(r => {
+        if (r.off && r.off[d.key]) return;
+        total++;
+        if (r.checks && r.checks[d.key]) done++;
+      });
+      if (jjItems.length) { total++; if (jjDone === jjItems.length) done++; }
+    }
+    return { ...d, rest, total, done, pct: total ? Math.round(done / total * 100) : null, jjDone, jjTotal: jjItems.length };
+  });
+  const total = days.reduce((s, d) => s + d.total, 0);
+  const done = days.reduce((s, d) => s + d.done, 0);
+  const workDays = days.filter(d => !d.rest);
   return {
-    monStr: fmtDate(mon),
-    label: `${mon.getMonth()+1}/${mon.getDate()}(월) ~ ${sun.getMonth()+1}/${sun.getDate()}(일)`,
-    days
+    rows, days, total, done,
+    pct: total ? Math.round(done / total * 100) : null,
+    jjFullDays: workDays.filter(d => d.jjTotal && d.jjDone === d.jjTotal).length,
+    jjActiveDays: workDays.filter(d => d.jjTotal).length,
   };
-}
-
-function getWeekRange(ds) {
-  const d = new Date(ds);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const mon = new Date(d);
-  mon.setDate(diff);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return `${mon.getMonth() + 1}/${mon.getDate()} ~ ${sun.getMonth() + 1}/${sun.getDate()}`;
 }
 
 function compressImage(file, callback) {
@@ -116,41 +145,26 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
+function saveNodeAsImage(node, filename) {
+  if (!node) return;
+  import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").then(() => {
+    window.html2canvas(node, { scale: 2, backgroundColor: "#FFFFFF" }).then(canvas => {
+      const a = document.createElement("a");
+      a.download = filename;
+      a.href = canvas.toDataURL();
+      a.click();
+    });
+  }).catch(() => alert("이미지 저장에 실패했어요. 화면을 캡처해서 써봐요!"));
+}
+
 const today    = new Date();
 const todayStr = fmtDate(today);
-
-const INIT_TODOS = {
-  work:    [{id:genId(),title:"기획서 초안 작성",    date:todayStr,done:false},{id:genId(),title:"팀 미팅 준비",    date:todayStr,done:true}],
-  economy: [{id:genId(),title:"주식 포트폴리오 확인",date:todayStr,done:false},{id:genId(),title:"월 가계부 정리",  date:todayStr,done:false}],
-  fitness: [{id:genId(),title:"30분 조깅",          date:todayStr,done:true}, {id:genId(),title:"스트레칭 10분",   date:todayStr,done:false}],
-  personal:[{id:genId(),title:"일기 쓰기",            date:todayStr,done:false},{id:genId(),title:"비타민 챙겨먹기",date:todayStr,done:true}],
-  apptech: [{id:genId(),title:"캐시워크 걷기",        date:todayStr,done:true}, {id:genId(),title:"토스 행운복권",  date:todayStr,done:false}],
-  event:   [{id:genId(),title:"쿠팡 할인쿠폰 확인",  date:todayStr,done:false}],
-  weekly:  [{id:genId(),title:"일주일 4번 조깅하기", targetCount:4, doneLog:{}}, {id:genId(),title:"밀린 인강 1개 듣기", targetCount:1, doneLog:{}}],
-};
 
 function load(key,fb){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fb; }catch{ return fb; } }
 function save(key,v){ try{ localStorage.setItem(key,JSON.stringify(v)); }catch{} }
 
-function isRoutine(item) { return !item.date; }
-function routineAppliesOn(item, ds) {
-  if (item.startDate && ds < item.startDate) return false;
-  if (item.endDate && ds > item.endDate) return false;
-  const type = item.repeatType || "daily";
-  if (type === "daily") return true;
-  if (type === "weekly") { return Array.isArray(item.weekDays) && item.weekDays.includes(new Date(ds).getDay()); }
-  if (type === "monthly") { return item.monthDay === new Date(ds).getDate(); }
-  if (type === "alternate") {
-    if (!item.startDate) return false;
-    const diffDays = Math.round((new Date(ds) - new Date(item.startDate)) / (1000 * 60 * 60 * 24));
-    return diffDays >= 0 && diffDays % 2 === 0;
-  }
-  return true;
-}
-function itemAppliesOn(item, ds) { return item.date ? isSame(item.date, ds) : routineAppliesOn(item, ds); }
-
 function repeatLabel(item) {
-  if (!isRoutine(item)) return null;
+  if (item.date) return item.date.slice(5).replace("-","/");
   if (item.endDate) { return item.startDate===item.endDate ? item.startDate.slice(5).replace("-","/") : `${item.startDate.slice(5).replace("-","/")} ~ ${item.endDate.slice(5).replace("-","/")}`; }
   const type = item.repeatType || "daily";
   if (type === "daily") return "매일";
@@ -166,20 +180,13 @@ function repeatLabel(item) {
   return "반복";
 }
 function repeatIcon(item) {
+  if (item.date) return "✅";
   if (item.endDate) return "🗓️";
   const type = item.repeatType || "daily";
   if (type === "alternate") return "⚡";
   if (type === "weekly") return "📅";
   if (type === "monthly") return "🗓️";
   return "🔁";
-}
-
-function cleanTodoItem(t, type) {
-  const n = { ...t };
-  if (type === "single") { delete n.startDate; delete n.endDate; delete n.repeatType; delete n.weekDays; delete n.monthDay; delete n.doneLog; }
-  else if (type === "period") { delete n.date; delete n.done; delete n.weekDays; delete n.monthDay; n.repeatType = "daily"; }
-  else { delete n.date; delete n.done; delete n.endDate; if (n.repeatType !== "weekly") delete n.weekDays; if (n.repeatType !== "monthly") delete n.monthDay; }
-  return n;
 }
 
 function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text" }) {
@@ -191,7 +198,7 @@ function KoreanTextarea({ value, onChange, style, placeholder, rows, onKeyDown }
   return <textarea defaultValue={value} placeholder={placeholder} rows={rows} style={style} onKeyDown={onKeyDown} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={(e)=>{composing.current=false;onChange(e.target.value);}} onChange={(e)=>{if(!composing.current)onChange(e.target.value);}}/>;
 }
 function ModalWrap({children, onClose, zIndex=100, isMobile}) {
-  return <div style={{position:"fixed",inset:0,background:"rgba(60,20,30,.38)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",zIndex}} onClick={onClose}><div style={{background:C.white,borderRadius:isMobile?"20px 20px 0 0":"20px",padding:26,width:isMobile?"100%":"390px",boxShadow:`0 20px 60px ${C.pink3}55`,maxHeight:"90vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>{children}</div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(60,20,30,.38)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",zIndex}} onClick={onClose}><div style={{background:C.white,borderRadius:isMobile?"20px 20px 0 0":"20px",padding:22,width:isMobile?"100%":"400px",boxShadow:`0 20px 60px ${C.pink3}55`,maxHeight:"92vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>{children}</div></div>;
 }
 function Ring({pct,size=56,stroke=5,color=C.rose,bg=C.pink1}) {
   const r=(size-stroke*2)/2, circ=2*Math.PI*r, off=circ-(pct/100)*circ;
@@ -203,122 +210,115 @@ function Ring({pct,size=56,stroke=5,color=C.rose,bg=C.pink1}) {
     </svg>
   );
 }
-function Bar({pct,color}) { return <div style={{flex:1,height:6,borderRadius:99,background:C.pink1,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:color,transition:"width .5s"}}/></div>; }
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
+function tomatoCount(pct) { return pct === null ? 0 : pct === 100 ? 3 : pct >= 70 ? 2 : 1; }
+const navBtn = {background:C.pink1,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:C.rose,fontWeight:800,fontSize:14};
 
-
-function WeeklyCheckbox({ checked, onToggle }) {
+function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
   return (
     <div
       onClick={onToggle}
       style={{
-        width: 20, height: 20, borderRadius: 6, cursor: "pointer", flexShrink: 0,
+        width: size, height: size, borderRadius: 7, cursor: "pointer", flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
-        border: checked ? "none" : `1.5px solid ${C.border}`,
-        background: checked ? C.rose : "transparent",
+        border: checked ? "none" : `1.5px solid ${C.pink2}`,
+        background: checked ? C.rose : C.white,
         transition: "all .15s",
       }}
     >
-      {checked && <span style={{ color: C.white, fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+      {checked && <span style={{ color: C.white, fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
     </div>
   );
 }
 
-// 짠토의 성장일지: 요일별 표 형식 주간 할 일. 체크 상태는 주(월요일 키)별로 저장되어 매주 자동으로 리셋됨.
-function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom }) {
+// 주간 표: 행 = 매일 하는 항목, 열 = 월~금. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
+// 짠테크는 항목이 많아서 표에는 "짠테크" 한 줄로만 들어가고, 그날 체크리스트를 다 끝내면 완료로 쳐요.
+function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggleRestDay, addWeeklyRow, updateWeeklyLabel, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, copyWeekFrom, openJjantech, openSummary }) {
   const [editMode, setEditMode] = useState(false);
   const captureRef = useRef(null);
+  const wk = getMonday(selDate);
+  const { rows, days } = stats;
+  const hasJj = days.some(d => d.jjTotal > 0);
+  const range = weekRangeLabel(wk);
+  const isThisWeek = wk === getMonday(todayStr);
+  const tc = tomatoCount(stats.pct);
+  const cols = WEEK_DAYS.length + 1 + (editMode ? 1 : 0);
 
-  const weekKey = getMonday(selDate);
-  const rows = getWeekRows(todos.weeklyTable, weekKey);
-  const prevWeekKey = findPrevWeekKey(todos.weeklyTable, weekKey);
-  const rangeStr = getWeekRange(selDate);
-
-  let total = 0, done = 0;
-  rows.forEach(row => {
-    WEEK_DAYS.forEach(({ key }) => {
-      const text = (row.cells && row.cells[key]) || "";
-      if (!text.trim()) return;
-      total++;
-      if (row.checks && row.checks[key]) done++;
-    });
-  });
-  const pct = total ? Math.round((done / total) * 100) : 0;
-
-  function handleSaveImage() {
-    const capture = () => {
-      const node = captureRef.current;
-      if (!node) return;
-      import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").then(() => {
-        window.html2canvas(node, { scale: 2, backgroundColor: "#FFFFFF" }).then(canvas => {
-          const a = document.createElement("a");
-          a.download = `짠토의_성장일지_${rangeStr.replace(/\s/g, "")}.png`;
-          a.href = canvas.toDataURL();
-          a.click();
-        });
-      }).catch(() => alert("이미지 저장에 실패했어요. 화면을 길게 눌러 캡처해봐요!"));
-    };
-    if (editMode) { setEditMode(false); setTimeout(capture, 50); } else { capture(); }
+  function handleSaveTable() {
+    const fname = `짠토의_주간표_${range.replace(/\s/g, "")}.png`;
+    if (editMode) { setEditMode(false); setTimeout(() => saveNodeAsImage(captureRef.current, fname), 80); }
+    else saveNodeAsImage(captureRef.current, fname);
   }
 
+  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: 110 };
+  const cellTd = d => ({ padding: "8px 2px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
+
   return (
-    <div style={{ background: "linear-gradient(135deg,#FFF3F1,#FFE2D8)", borderRadius: 16, padding: "14px 16px", border: `1.5px solid ${C.border}`, marginBottom: 16, boxShadow: `0 2px 10px ${C.pink1}` }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 20 }}>🍅</span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, letterSpacing: "-0.5px" }}>짠토의 성장일지</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.rose, opacity: 0.7, background: C.rose + "1A", padding: "2px 6px", borderRadius: 6 }}>{rangeStr}</span>
-        </div>
-        <button onClick={() => setEditMode(p => !p)} style={{ padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: editMode ? "#7EC8A4" : C.rose }}>
+    <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+        <button onClick={() => setSelDate(addDays(wk, -7))} style={navBtn}>‹</button>
+        <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, flex: 1, textAlign: "center" }}>{range}</span>
+        <button onClick={() => setSelDate(addDays(wk, 7))} style={navBtn}>›</button>
+        {!isThisWeek && <button onClick={() => setSelDate(todayStr)} style={{ ...navBtn, background: C.pink2, color: C.white, fontSize: 12 }}>이번 주</button>}
+        <button onClick={() => setEditMode(p => !p)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: editMode ? C.green : C.rose }}>
           {editMode ? "완료" : "편집"}
         </button>
       </div>
 
-      <div ref={captureRef} style={{ background: C.white, borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <div style={{ flex: 1, height: 6, borderRadius: 99, background: C.pink1, overflow: "hidden" }}>
-            <div style={{ width: `${pct}%`, height: "100%", borderRadius: 99, background: C.rose, transition: "width .5s" }} />
+      <div ref={captureRef} style={{ background: C.white, borderRadius: 16, padding: 14, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg,#FFF3F1,#FFE2D8)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+          <Ring pct={stats.pct || 0} size={60} stroke={7} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 900, color: C.rose }}>🍅 주간 달성률{tc > 0 && <TomatoRow count={tc} />}</div>
+            <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 3 }}>
+              {stats.total ? `${stats.done}/${stats.total}칸 완료 · ${range} (월~금)` : "아직 체크할 칸이 없어요"}
+            </div>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 800, color: C.rose, minWidth: 32, textAlign: "right" }}>{pct}%</span>
-          <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{done}/{total} 완료</span>
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 420 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
               <tr>
-                <th style={{ position: "sticky", left: 0, zIndex: 1, background: C.white, minWidth: 90, padding: "6px 8px", fontSize: 12, color: C.sub, textAlign: "left", borderBottom: `1.5px solid ${C.border}` }} />
-                {WEEK_DAYS.map(d => (
-                  <th key={d.key} style={{ minWidth: 72, padding: "6px 4px", fontSize: 12, fontWeight: 800, color: C.sub, borderBottom: `1.5px solid ${C.border}` }}>{d.label}</th>
-                ))}
-                {editMode && <th style={{ width: 28, borderBottom: `1.5px solid ${C.border}` }} />}
+                <th style={{ ...labelTd, borderBottom: `1.5px solid ${C.border}` }} />
+                {days.map(d => {
+                  const isToday = d.ds === todayStr;
+                  return (
+                    <th key={d.key} onClick={editMode ? () => toggleRestDay(d.ds) : undefined} style={{ minWidth: 44, padding: "4px 2px 6px", borderBottom: `1.5px solid ${C.border}`, cursor: editMode ? "pointer" : "default", background: isToday ? C.rose + "0D" : "transparent" }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: isToday ? C.rose : C.text }}>{d.label}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? C.rose : C.sub }}>{d.rest ? "🌿" : Number(d.ds.slice(8))}</div>
+                    </th>
+                  );
+                })}
+                {editMode && <th style={{ width: 26, borderBottom: `1.5px solid ${C.border}` }} />}
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
                 <tr key={row.id}>
-                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "6px 8px", borderBottom: `1px dashed ${C.border}` }}>
+                  <td style={labelTd}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
                       {editMode ? (
-                        <KoreanInput key={"rowlabel-" + weekKey + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(weekKey, row.id, v)} style={{ width: 66, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                        <KoreanInput key={"rowlabel-" + wk + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(wk, row.id, v)} style={{ width: 76, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
                       ) : (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</span>
                       )}
                     </div>
                   </td>
-                  {WEEK_DAYS.map(d => {
-                    const text = (row.cells && row.cells[d.key]) || "";
+                  {days.map(d => {
+                    const off = !!(row.off && row.off[d.key]);
                     const checked = !!(row.checks && row.checks[d.key]);
                     return (
-                      <td key={d.key} style={{ padding: "6px 4px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "top" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(weekKey, row.id, d.key)} />
+                      <td key={d.key} style={cellTd(d)}>
+                        <div style={{ display: "flex", justifyContent: "center" }}>
                           {editMode ? (
-                            <KoreanInput key={"cell-" + weekKey + "-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(weekKey, row.id, d.key, v)} placeholder="-" style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 11, textAlign: "center", outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                            <button onClick={() => toggleWeeklyOff(wk, row.id, d.key)} style={{ width: 26, height: 22, borderRadius: 7, border: `1.5px dashed ${off ? C.border : C.pink2}`, background: off ? "#F5EEEC" : C.white, color: off ? C.sub : C.pink3, fontWeight: 900, fontSize: 12, cursor: "pointer", padding: 0 }}>{off ? "—" : "○"}</button>
+                          ) : off ? (
+                            <span style={{ color: C.pink2, fontWeight: 900, fontSize: 13 }}>—</span>
                           ) : (
-                            <span style={{ fontSize: 11, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 60, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text || "-"}</span>
+                            <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(wk, row.id, d.key)} />
                           )}
                         </div>
                       </td>
@@ -326,150 +326,220 @@ function WeeklyGrowthLog({ selDate, todos, addWeeklyRow, updateWeeklyLabel, upda
                   })}
                   {editMode && (
                     <td style={{ textAlign: "center", verticalAlign: "middle", borderBottom: `1px dashed ${C.border}` }}>
-                      <button onClick={() => removeWeeklyRow(weekKey, row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                      <button onClick={() => removeWeeklyRow(wk, row.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
                     </td>
                   )}
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {hasJj && (
                 <tr>
-                  <td colSpan={editMode ? WEEK_DAYS.length + 2 : WEEK_DAYS.length + 1} style={{ textAlign: "center", padding: "16px 0", fontSize: 12, color: C.sub }}>
-                    {editMode ? "아래 ＋ 행 추가 버튼으로 첫 항목을 만들어봐요!" : "이번 주 계획이 아직 없어요. 편집을 눌러 새로 만들거나 지난 계획을 불러와봐요 🍅"}
-                    {prevWeekKey && (
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
-                        <button onClick={() => copyWeekFrom(prevWeekKey, weekKey, false)} style={{ padding: "6px 10px", borderRadius: 8, border: `1.5px solid ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>📋 지난 항목만 가져오기</button>
-                        <button onClick={() => copyWeekFrom(prevWeekKey, weekKey, true)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: C.rose, color: C.white, fontWeight: 800, fontSize: 11, cursor: "pointer" }}>📋 내용까지 그대로 복사</button>
-                      </div>
-                    )}
+                  <td style={labelTd}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12 }}>📱</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap" }}>짠테크</span>
+                    </div>
                   </td>
+                  {days.map(d => {
+                    const full = d.jjDone === d.jjTotal;
+                    return (
+                      <td key={d.key} style={cellTd(d)}>
+                        {d.jjTotal === 0 ? <span style={{ color: C.pink2, fontWeight: 900, fontSize: 13 }}>—</span> : <button onClick={() => openJjantech(d.ds)} title="짠테크 체크리스트 열기" style={{ border: "none", borderRadius: 7, padding: "4px 2px", minWidth: 40, fontSize: 10, fontWeight: 800, cursor: "pointer", background: full ? C.rose : C.pink1, color: full ? C.white : C.sub, fontFamily: "inherit" }}>{d.jjDone}/{d.jjTotal}</button>}
+                      </td>
+                    );
+                  })}
+                  {editMode && <td style={{ borderBottom: `1px dashed ${C.border}` }} />}
                 </tr>
+              )}
+              {(rows.length > 0 || hasJj) && (
+                <tr>
+                  <td style={{ ...labelTd, borderBottom: "none", background: C.white }}>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: C.rose, whiteSpace: "nowrap" }}>일간 달성률</span>
+                  </td>
+                  {days.map(d => (
+                    <td key={d.key} style={{ padding: "10px 2px 4px", textAlign: "center", background: d.ds === todayStr ? C.rose + "0D" : "transparent" }}>
+                      <span style={{ fontSize: 12, fontWeight: 900, color: d.rest ? C.sub : d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "쉼" : d.pct === null ? "—" : d.pct + "%"}</span>
+                    </td>
+                  ))}
+                  {editMode && <td />}
+                </tr>
+              )}
+              {rows.length === 0 && !hasJj && (
+                <tr><td colSpan={cols} style={{ textAlign: "center", padding: "18px 0", fontSize: 12, color: C.sub }}>
+                  {editMode ? "아래 ＋ 항목 추가 버튼으로 첫 항목을 만들어봐요!" : "이번 주 표가 비어 있어요. 편집을 눌러 매일 할 일을 넣어봐요 🍅"}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {editMode && (
-        <button onClick={() => addWeeklyRow(weekKey)} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 행 추가</button>
+      {rows.length === 0 && prevWeekKey && (
+        <button onClick={() => copyWeekFrom(prevWeekKey, wk)} style={{ marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px solid ${C.rose}`, background: C.white, color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📋 지난주 항목 그대로 가져오기</button>
       )}
 
-      <button onClick={handleSaveImage} style={{ marginTop: 10, width: "100%", padding: "8px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 이미지로 저장</button>
+      {editMode && (
+        <>
+          <button onClick={() => addWeeklyRow(wk)} style={{ marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 항목 추가</button>
+          <div style={{ marginTop: 8, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" }}>
+            💡 칸(○)을 누르면 <b>—</b>로 바뀌어요. — 칸은 "그날은 안 하는 날"이라 달성률에서 빠져요.<br />
+            🌿 요일 이름을 누르면 그날 전체가 쉼(공휴일 등)으로 빠져요.<br />
+            📱 짠테크 줄은 짠테크 탭에 항목을 넣으면 자동으로 생겨요.
+          </div>
+        </>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <button onClick={handleSaveTable} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${C.rose}`, background: C.white, color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 표 이미지 저장</button>
+        <button onClick={openSummary} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🎬 영상용 요약 카드</button>
+      </div>
     </div>
   );
 }
 
+// 영상에 넣을 한 장짜리 카드: 항목 이름 없이 주간 달성률과 요일별 일간 달성률만 보여줘요
+function SummaryCardModal({ isMobile, stats, wk, onClose }) {
+  const ref = useRef(null);
+  const range = weekRangeLabel(wk);
+  const tc = tomatoCount(stats.pct);
+  const msg = stats.pct === null ? "🍅 이번 주도 화이팅!" : stats.pct === 100 ? "🎉 이번 주 올클리어!" : stats.pct >= 70 ? "🌸 이번 주도 잘 해냈다!" : "🍅 다음 주엔 조금 더 힘내보자!";
+  return (
+    <ModalWrap onClose={onClose} zIndex={300} isMobile={isMobile}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: C.rose, marginBottom: 14, textAlign: "center" }}>🎬 영상용 요약 카드</div>
+      <div ref={ref} style={{ background: "linear-gradient(160deg,#FFF3F1,#FFE2D8)", borderRadius: 20, padding: "22px 20px", border: `2px solid ${C.border}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 10 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", fontSize: 18, fontWeight: 900, color: C.rose }}>짠토의 성장일지{tc > 0 && <TomatoRow count={tc} />}</div>
+            <div style={{ fontSize: 12, color: C.sub, fontWeight: 700, marginTop: 3 }}>{range} · 월~금</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <Ring pct={stats.pct || 0} size={78} stroke={8} />
+            <div style={{ fontSize: 10, color: C.sub, fontWeight: 800, marginTop: 4 }}>주간 달성률</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: C.sub, marginBottom: 8 }}>일간 달성률</div>
+        {stats.days.map(d => (
+          <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+            <span style={{ width: 18, fontSize: 14, fontWeight: 900, color: C.text }}>{d.label}</span>
+            {d.rest ? (
+              <span style={{ flex: 1, fontSize: 12, color: C.sub, fontWeight: 700 }}>🌿 쉬는 날</span>
+            ) : (
+              <div style={{ flex: 1, height: 14, borderRadius: 99, background: "rgba(255,255,255,.85)", overflow: "hidden" }}>
+                <div style={{ width: `${d.pct || 0}%`, height: "100%", borderRadius: 99, background: d.pct === 100 ? C.green : `linear-gradient(90deg,${C.pink3},${C.rose})` }} />
+              </div>
+            )}
+            <span style={{ width: 42, textAlign: "right", fontSize: 14, fontWeight: 900, color: d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "" : d.pct === null ? "—" : d.pct + "%"}</span>
+          </div>
+        ))}
+        {stats.jjActiveDays > 0 && (
+          <div style={{ marginTop: 12, background: "rgba(255,255,255,.8)", borderRadius: 12, padding: "9px 12px", fontSize: 12, fontWeight: 700, color: C.text, display: "flex", justifyContent: "space-between" }}>
+            <span>📱 짠테크 완주한 날</span><span style={{ color: C.rose, fontWeight: 900 }}>{stats.jjFullDays}/{stats.jjActiveDays}일</span>
+          </div>
+        )}
+        <div style={{ marginTop: 14, textAlign: "center", fontSize: 13, color: C.sub, fontWeight: 700 }}>{msg}</div>
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <button onClick={() => saveNodeAsImage(ref.current, `짠토의_성장일지_${range.replace(/\s/g, "")}.png`)} style={{ padding: "10px 22px", borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 800, background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white }}>💾 이미지 저장</button>
+        <button onClick={onClose} style={{ padding: "10px 18px", borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 700, background: C.pink1, color: C.sub }}>닫기</button>
+      </div>
+    </ModalWrap>
+  );
+}
 
-// 짠토의 성장일지 위에 얹는 "이번 주 달성률" 요약 카드. selDate가 속한 주 기준으로 계산되고,
-// 쉬는 날로 표시한 날은 통계에서 제외돼요.
-function WeeklyStatsCard({ selDate, activeCats, todos, isDone, todayStr, isRestDay }) {
-  const week = getCurrentWeek(selDate);
-  const days = week.days.filter(ds => !isRestDay(ds));
-  const restCount = week.days.length - days.length;
+// 짠테크 매일 체크리스트: 항목은 한 번만 만들어두고, 체크는 날짜별로 따로 저장돼서 매일 새로 시작해요
+function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, toggleJjantech, addJjantechItems, renameJjantechItem, removeJjantechItem, moveJjantechItem }) {
+  const [editMode, setEditMode] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+  const [bulk, setBulk] = useState("");
+  const [bulkKey, setBulkKey] = useState(0);
+  // 편집할 땐 모든 항목을, 체크할 땐 그날 이미 있던 항목만 보여줘요
+  const items = editMode ? (jj.items || []) : jjItemsOn(jj, selDate);
+  const log = (jj.log && jj.log[selDate]) || {};
+  const done = items.filter(it => log[it.id]).length;
+  const pct = items.length ? Math.round(done / items.length * 100) : 0;
+  const dow = parseDate(selDate).getDay();
+  const weekend = dow === 0 || dow === 6;
+  const visible = hideDone && !editMode ? items.filter(it => !log[it.id]) : items;
+  const dateLabel = parseDate(selDate).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
 
-  const catStats = {};
-  activeCats.forEach(c => { catStats[c.id] = { total: 0, done: 0 }; });
-  let total = 0, done = 0;
-  days.forEach(ds => {
-    activeCats.forEach(cat => {
-      const items = (todos[cat.id]||[]).filter(t => !t.archived && itemAppliesOn(t, ds));
-      items.forEach(t => {
-        const d = isDone(t, ds);
-        total++; if(d) done++;
-        catStats[cat.id].total++;
-        if(d) catStats[cat.id].done++;
-      });
-    });
-  });
-  const pct = total ? Math.round(done/total*100) : null;
-  const tc = pct === 100 ? 3 : (pct !== null && pct >= 70 ? 2 : 1);
-
-  function dayPct(ds) {
-    const items = activeCats.flatMap(c => (todos[c.id]||[]).filter(t => !t.archived && itemAppliesOn(t, ds)).map(t => ({ ...t, catId: c.id, done: isDone(t, ds) })));
-    return items.length ? Math.round(items.filter(t=>t.done).length/items.length*100) : null;
+  function submitBulk() {
+    const titles = bulk.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!titles.length) return;
+    addJjantechItems(titles);
+    setBulk(""); setBulkKey(k => k + 1);
   }
 
   return (
-    <div style={{background:"linear-gradient(135deg,#FFF3F1,#FFE2D8)",borderRadius:20,border:`1.5px solid ${C.border}`,padding:"18px 20px",marginBottom:16,boxShadow:`0 2px 8px ${C.pink1}`}}>
-      <style>{`
-        @keyframes tomato-bounce {
-          from { transform: translateY(0px) rotate(-5deg); }
-          to   { transform: translateY(-4px) rotate(5deg); }
-        }
-      `}</style>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:4}}>
-          <span style={{fontSize:18,fontWeight:900,color:C.rose}}>{week.label}</span>
-          {pct !== null && <TomatoRow count={tc}/>}
-          {restCount > 0 && <span style={{fontSize:11,fontWeight:700,color:C.sub,background:C.white,padding:"2px 8px",borderRadius:99}}>🌿 쉼 {restCount}일 제외</span>}
+    <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setSelDate(addDays(selDate, -1))} style={navBtn}>‹</button>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, flex: 1, textAlign: "center" }}>{selDate === todayStr ? `오늘 · ${dateLabel}` : dateLabel}</span>
+          <button onClick={() => setSelDate(addDays(selDate, 1))} style={navBtn}>›</button>
+          {selDate !== todayStr && <button onClick={() => setSelDate(todayStr)} style={{ ...navBtn, background: C.pink2, color: C.white, fontSize: 12 }}>오늘</button>}
+          <button onClick={() => setEditMode(p => !p)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: editMode ? C.green : C.rose }}>{editMode ? "완료" : "편집"}</button>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:13,color:C.sub,fontWeight:600}}>{done}/{total} 완료</span>
-          <Ring pct={pct||0} size={54} stroke={6} color={C.rose} bg={C.pink1}/>
-        </div>
-      </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:16}}>
-        {week.days.map(ds => {
-          const rest = isRestDay(ds);
-          const dp = rest ? null : dayPct(ds);
-          const isToday = ds === todayStr;
-          const dow = new Date(ds).getDay();
-          return (
-            <div key={ds} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-              <span style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?C.rose:[0,6].includes(dow)?C.pink3:C.sub}}>{DAYS_KO[dow]}</span>
-              <div style={{width:"100%",height:48,borderRadius:8,background:C.pink1,position:"relative",overflow:"hidden",border:isToday?`2px solid ${C.rose}`:"none",display:rest?"flex":"block",alignItems:"center",justifyContent:"center"}}>
-                {rest ? <span style={{fontSize:16}}>🌿</span> : dp!==null && (
-                  <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${dp}%`,
-                    background:isToday?`linear-gradient(180deg,${C.rose},${C.pink3})`:dp===100?"#7EC8A4":`linear-gradient(180deg,${C.pink3},${C.pink2})`,
-                    borderRadius:6,transition:"height .5s"}}/>
-                )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.white, borderRadius: 16, padding: "12px 16px", border: `1.5px solid ${C.border}`, marginBottom: 12, boxShadow: `0 2px 10px ${C.pink1}` }}>
+          <Ring pct={pct} size={52} stroke={6} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>📱 오늘의 짠테크</div>
+            <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 2 }}>
+              {items.length ? `${done}/${items.length}개 완료${done === items.length ? " · 완주! 🎉" : ""}` : (jj.items || []).length ? "이 날엔 아직 짠테크 항목이 없었어요" : "편집을 눌러 짠테크 항목을 넣어봐요"}
+            </div>
+            {weekend && <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>🌿 주말은 보충데이라 달성률에 안 들어가요</div>}
+          </div>
+          {!editMode && items.length > 0 && (
+            <button onClick={() => setHideDone(p => !p)} style={{ padding: "5px 10px", borderRadius: 99, border: `1.5px solid ${hideDone ? C.rose : C.border}`, background: hideDone ? C.rose + "18" : C.white, color: hideDone ? C.rose : C.sub, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>{hideDone ? `완료 숨김(${done})` : "완료 숨기기"}</button>
+          )}
+        </div>
+
+        {!editMode && hideDone && items.length > 0 && visible.length === 0 && (
+          <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: C.sub, fontWeight: 700 }}>🎉 오늘 짠테크 모두 끝!</div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: isMobile || editMode ? "1fr" : "1fr 1fr", gap: 6 }}>
+          {visible.map((it, i) => {
+            const checked = !!log[it.id];
+            return editMode ? (
+              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 6, background: C.white, borderRadius: 10, padding: "6px 10px", border: `1.5px solid ${C.border}` }}>
+                <span style={{ fontSize: 11, color: C.sub, width: 18, textAlign: "right" }}>{i + 1}</span>
+                <KoreanInput key={"jj-" + it.id} value={it.title} onChange={v => renameJjantechItem(it.id, v)} style={{ flex: 1, minWidth: 0, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 14, color: C.text, outline: "none", background: "transparent", padding: "3px 0", fontFamily: "inherit" }} />
+                <button onClick={() => moveJjantechItem(it.id, -1)} disabled={i === 0} style={{ background: "none", border: "none", cursor: "pointer", color: C.sub, fontSize: 13, opacity: i === 0 ? .25 : .8 }}>↑</button>
+                <button onClick={() => moveJjantechItem(it.id, 1)} disabled={i === items.length - 1} style={{ background: "none", border: "none", cursor: "pointer", color: C.sub, fontSize: 13, opacity: i === items.length - 1 ? .25 : .8 }}>↓</button>
+                <button onClick={() => removeJjantechItem(it.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
               </div>
-              <span style={{fontSize:11,fontWeight:700,color:rest?C.sub:isToday?C.rose:dp===100?"#7EC8A4":C.sub}}>{rest?"쉼":dp===null?"—":dp+"%"}</span>
-              <span style={{fontSize:11,color:C.sub}}>{ds.slice(8)}</span>
-            </div>
-          );
-        })}
-      </div>
+            ) : (
+              <div key={it.id} onClick={() => toggleJjantech(selDate, it.id)} style={{ display: "flex", alignItems: "center", gap: 10, background: checked ? "#FFF3F1" : C.white, borderRadius: 10, padding: "10px 12px", border: `1.5px solid ${checked ? C.pink2 : C.border}`, cursor: "pointer", userSelect: "none" }}>
+                <WeeklyCheckbox checked={checked} onToggle={() => {}} />
+                <span style={{ flex: 1, fontSize: 14, fontWeight: checked ? 500 : 700, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none" }}>{it.title}</span>
+              </div>
+            );
+          })}
+        </div>
 
-      <div style={{display:"flex",flexDirection:"column",gap:7}}>
-        {activeCats.map(cat => {
-          const cs = catStats[cat.id];
-          if (cs.total === 0) return null;
-          const cp = Math.round(cs.done/cs.total*100);
-          return (
-            <div key={cat.id} style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:16,flexShrink:0}}>{cat.emoji}</span>
-              <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:52,flexShrink:0}}>{cat.name}</span>
-              <Bar pct={cp} color={cat.color}/>
-              <span style={{fontSize:13,fontWeight:800,color:cat.color,minWidth:32,textAlign:"right"}}>{cp}%</span>
-              <span style={{fontSize:11,color:C.sub,minWidth:38,textAlign:"right"}}>{cs.done}/{cs.total}</span>
-            </div>
-          );
-        })}
+        {editMode && (
+          <div style={{ marginTop: 12, background: C.white, borderRadius: 12, padding: 12, border: `1.5px dashed ${C.rose}` }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.rose, marginBottom: 6 }}>＋ 항목 추가 (한 줄에 하나씩, 여러 개 한 번에 붙여넣어도 돼요)</div>
+            <KoreanTextarea key={"bulk-" + bulkKey} value={bulk} onChange={setBulk} rows={4} placeholder={"예)\n출석체크\n만보기 적립\n퀴즈 풀기"} style={{ ...inp, resize: "vertical", lineHeight: 1.6, marginBottom: 8 }} />
+            <button onClick={submitBulk} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>추가하기</button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// 주간 표로 바뀌기 전에 쓰던 분류별 할일 기록이에요. 지금은 기록용으로만 남겨두고, 필요 없으면 지울 수 있어요.
 function ArchiveView({ isMobile, todos, cats, setTodosS }) {
   const [confirmId, setConfirmId] = useState(null);
-  const archivedItems = cats.flatMap(cat =>
-    (todos[cat.id]||[])
-      .filter(t => t.archived)
-      .map(t => ({ ...t, catId: cat.id, catName: cat.name, catEmoji: cat.emoji, catColor: cat.color }))
-  );
-  
-  const allArchived = archivedItems;
+  const byCat = cats
+    .map(cat => ({ cat, items: Array.isArray(todos[cat.id]) ? todos[cat.id] : [] }))
+    .filter(g => g.items.length > 0);
 
-  function restore(catId, id) {
-    setTodosS(p => ({ ...p, [catId]: p[catId].map(t => t.id===id ? { ...t, archived:false } : t) }));
-  }
   function deletePermanently(catId, id) {
-    setTodosS(p => ({ ...p, [catId]: p[catId].filter(t => t.id!==id) }));
+    setTodosS(p => ({ ...p, [catId]: (p[catId] || []).filter(t => t.id !== id) }));
     setConfirmId(null);
   }
-
-  const byCat = cats.map(cat => ({ cat, items: allArchived.filter(t=>t.catId===cat.id) })).filter(g => g.items.length > 0);
 
   return (
     <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
@@ -477,19 +547,18 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
           <span style={{fontSize:22}}>📦</span>
           <div>
-            <div style={{fontSize:18,fontWeight:800,color:C.rose}}>루틴 보관함</div>
-            <div style={{fontSize:12,color:C.sub,marginTop:2}}>삭제된 루틴들이 여기 보관돼요. 복원하거나 영구 삭제할 수 있어요.</div>
+            <div style={{fontSize:18,fontWeight:800,color:C.rose}}>예전 할일 보관함</div>
+            <div style={{fontSize:12,color:C.sub,marginTop:2}}>주간 표로 바뀌기 전에 쓰던 할일이에요.</div>
           </div>
         </div>
         <div style={{background:C.pink1,borderRadius:12,padding:"10px 14px",marginBottom:20,fontSize:12,color:C.sub,lineHeight:1.7}}>
-          💡 루틴을 삭제하면 과거 달성 기록은 그대로 보존되고 여기에 보관돼요.<br/>
-          🔄 복원하면 다시 할일 목록에 나타나요 · 🗑️ 영구삭제하면 기록도 모두 사라져요.
+          💡 여기 기록은 달성률에 들어가지 않아요. 매일 하는 일은 주간 표에 다시 넣어주세요.<br/>
+          🗑️ 필요 없는 건 영구 삭제할 수 있어요.
         </div>
-        {allArchived.length === 0 && (
+        {byCat.length === 0 && (
           <div style={{textAlign:"center",padding:"60px 0",color:C.sub}}>
             <div style={{fontSize:48,marginBottom:12}}>📭</div>
-            <div style={{fontSize:15,fontWeight:700}}>보관된 루틴이 없어요</div>
-            <div style={{fontSize:13,marginTop:6}}>루틴을 삭제하면 여기에 보관돼요 🍅</div>
+            <div style={{fontSize:15,fontWeight:700}}>보관된 할일이 없어요</div>
           </div>
         )}
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -506,17 +575,14 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
                     <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px dashed ${C.border}`}}>
                       <span style={{fontSize:13,color:C.sub,flexShrink:0}}>{repeatIcon(item)}</span>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:14,color:C.sub,textDecoration:"line-through",fontWeight:500}}>{item.title}</div>
-                        {item.startDate && !item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>{repeatLabel(item)} · {item.startDate} 부터 시작</div>}
-                        {item.endDate && <div style={{fontSize:11,color:C.sub,marginTop:2}}>🗓️ 기간 할일 · {item.startDate} ~ {item.endDate}</div>}
-                        {item.doneLog && Object.keys(item.doneLog).length > 0 && (
-                          <div style={{fontSize:11,color:cat.color,marginTop:2}}>✅ 완료 기록 {Object.keys(item.doneLog).length}주/일</div>
-                        )}
+                        <div style={{fontSize:14,color:C.text,fontWeight:600}}>{item.title}</div>
+                        <div style={{fontSize:11,color:C.sub,marginTop:2}}>
+                          {repeatLabel(item)}
+                          {item.doneLog && Object.keys(item.doneLog).length > 0 && <span style={{color:cat.color}}> · ✅ 완료 기록 {Object.keys(item.doneLog).length}일</span>}
+                          {item.date && item.done && <span style={{color:cat.color}}> · ✅ 완료</span>}
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:6,flexShrink:0}}>
-                        <button onClick={()=>restore(cat.id, item.id)} style={{padding:"5px 12px",borderRadius:10,border:`1.5px solid ${cat.color}`,background:cat.color+"18",color:cat.color,fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 복원</button>
-                        <button onClick={()=>setConfirmId(item.id)} style={{padding:"5px 12px",borderRadius:10,border:"1.5px solid #FFB3B3",background:"#FFF0F0",color:"#E63946",fontSize:12,fontWeight:700,cursor:"pointer"}}>🗑️ 삭제</button>
-                      </div>
+                      <button onClick={()=>setConfirmId(item.id)} style={{padding:"5px 12px",borderRadius:10,border:"1.5px solid #FFB3B3",background:"#FFF0F0",color:"#E63946",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>🗑️ 삭제</button>
                     </div>
                     {confirmId === item.id && (
                       <div style={{margin:"0 16px 10px",padding:"12px 14px",background:"#FFF0F0",borderRadius:10,border:"1.5px solid #FFB3B3"}}>
@@ -534,203 +600,6 @@ function ArchiveView({ isMobile, todos, cats, setTodosS }) {
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-
-function ListView({isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, isDone, visibleTodosOn, openAddTodo, openEditTodo, toggleTodo, hideCompleted, setHideCompleted, setCatForm, setCatModal, setShareCard, onMoveCat, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, cats, showCat, deleteCat, isRestDay, toggleRestDay}) {
-  const [confirmDeleteCatId, setConfirmDeleteCatId] = useState(null);
-  const dragItem = useRef();
-  const dragOverItem = useRef();
-
-  function handleDragStart(e, index) {
-    dragItem.current = index;
-    e.dataTransfer.effectAllowed = "move";
-  }
-  function handleDragEnter(e, index) {
-    dragOverItem.current = index;
-  }
-  function handleDragEnd() {
-    if (dragItem.current !== undefined && dragOverItem.current !== undefined && dragItem.current !== dragOverItem.current) {
-      onMoveCat(dragItem.current, dragOverItem.current);
-    }
-    dragItem.current = null;
-    dragOverItem.current = null;
-  }
-
-  return (
-    <div style={{flex:1,overflow:"auto",padding:isMobile?"12px 14px":"16px 20px"}}>
-      <div style={{display:"flex",flexDirection:isMobile?"column":"row",alignItems:isMobile?"stretch":"center",gap:8,marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={()=>{const d=new Date(selDate);d.setDate(d.getDate()-1);setSelDate(fmtDate(d));}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:800}}>‹</button>
-          <input type="date" value={selDate} onChange={e=>setSelDate(e.target.value)} style={{border:`1.5px solid ${C.border}`,borderRadius:10,padding:"6px 10px",fontSize:13,color:C.text,background:C.white,fontFamily:"inherit",outline:"none"}}/>
-          <button onClick={()=>{const d=new Date(selDate);d.setDate(d.getDate()+1);setSelDate(fmtDate(d));}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.rose,fontWeight:800}}>›</button>
-          <button onClick={()=>setSelDate(todayStr)} style={{background:C.pink2,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",color:C.white,fontWeight:700,fontSize:12}}>오늘</button>
-          <button onClick={()=>toggleRestDay(selDate)} style={{background:isRestDay(selDate)?"#7EC8A4":C.white,border:`1.5px solid ${isRestDay(selDate)?"#7EC8A4":C.border}`,borderRadius:8,padding:"5px 10px",cursor:"pointer",color:isRestDay(selDate)?C.white:C.sub,fontWeight:700,fontSize:12}}>🌿 쉼</button>
-        </div>
-        {isRestDay(selDate) ? (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:"#F0FFF8",borderRadius:16,padding:isMobile?"8px 14px":"10px 16px",border:"1.5px solid #A5D6A7",flex:1,minWidth:0}}>
-            <span style={{fontSize:24}}>🌿</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#2E7D32"}}>쉬는 중이에요</div>
-              <div style={{fontSize:11,color:C.sub}}>이 날은 달성률 계산에서 빠져요. 편히 쉬어요!</div>
-            </div>
-          </div>
-        ) : (
-          <div style={{display:"flex",alignItems:"center",gap:10,background:C.white,borderRadius:16,padding:isMobile?"8px 12px":"10px 16px",border:`1.5px solid ${C.border}`,flex:1,minWidth:0,boxShadow:`0 2px 10px ${C.pink1}`}}>
-            <Ring pct={totalPctOn(selDate)} size={isMobile?44:54} stroke={isMobile?5:6} color={C.rose} bg={C.pink1}/>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:800,color:C.rose}}>🍅 오늘 달성률</div>
-              <div style={{fontSize:11,color:C.sub}}>{allTodosOn(selDate).filter(t=>t.done).length}/{allTodosOn(selDate).length} 완료</div>
-              {totalPctOn(selDate)===100&&allTodosOn(selDate).length>0&&<div style={{fontSize:11,color:C.tomato,fontWeight:700}}>완벽해요! 🎉</div>}
-            </div>
-            {!isMobile&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{activeCats.map(cat=>(
-              <div key={cat.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
-                <Ring pct={catPctOn(cat.id,selDate)} size={36} stroke={4} color={cat.color} bg={C.pink1}/>
-                <span style={{fontSize:9,color:C.sub}}>{cat.emoji}</span>
-              </div>
-            ))}</div>}
-            <button onClick={()=>setShareCard(true)} style={{background:`linear-gradient(135deg,${C.pink3},${C.rose})`,border:"none",borderRadius:10,padding:"8px 10px",cursor:"pointer",color:C.white,fontSize:16,flexShrink:0}}>📸</button>
-          </div>
-        )}
-      </div>
-
-      <WeeklyStatsCard selDate={selDate} activeCats={activeCats} todos={todos} isDone={isDone} todayStr={todayStr} isRestDay={isRestDay}/>
-
-      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} />
-
-      <div style={{fontSize:11,color:C.sub,marginBottom:10,display:"flex",alignItems:"center",gap:4}}>
-        <span>💡 팁: 분류 이름(상단 영역)을 마우스로 드래그하면 원하는 순서대로 위치를 바꿀 수 있어요!</span>
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(270px,1fr))",gap:isMobile?10:14}}>
-        {activeCats.map((cat, index)=>{
-          const items=visibleTodosOn(cat.id,selDate);
-          const pct=catPctOn(cat.id,selDate),isHiding=hideCompleted[cat.id]!==false;
-          const vis=isHiding?items.filter(t=>!t.done):items, hiddenCount=items.filter(t=>t.done).length;
-          return (
-            <div 
-              key={cat.id} draggable onDragStart={(e)=>handleDragStart(e, index)} onDragEnter={(e)=>handleDragEnter(e, index)} onDragEnd={handleDragEnd} onDragOver={(e)=>e.preventDefault()}
-              style={{background:C.white,borderRadius:16,padding:"14px",border:`1.5px solid ${C.border}`,boxShadow:`0 2px 10px ${C.pink1}`,transition:"transform 0.15s"}}
-            >
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,cursor:"move",userSelect:"none",paddingBottom:4,borderBottom:`1px dashed ${C.border}`}} title="드래그해서 순서 변경">
-                <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,overflow:"hidden"}}>
-                  <span style={{color:C.sub,opacity:0.4,fontSize:13,letterSpacing:-2,marginRight:2}}>:::</span>
-                  <span style={{fontSize:18,flexShrink:0}}>{cat.emoji}</span>
-                  <span style={{fontSize:15,fontWeight:800,flex:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cat.name}</span>
-                  <span style={{fontSize:10,color:cat.color,background:cat.color+"22",padding:"2px 8px",borderRadius:99,flexShrink:0}}>{items.length}개</span>
-                </div>
-                <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,marginLeft:6}}>
-                  <button onClick={(e)=>{e.stopPropagation();setHideCompleted(p=>({...p,[cat.id]:!isHiding}));}} style={{padding:"3px 8px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:11,fontWeight:700}}>{isHiding?`숨김(${hiddenCount})`:"숨김해제"}</button>
-                  <button onClick={(e)=>{e.stopPropagation();setCatForm({name:cat.name,emoji:cat.emoji,color:cat.color});setCatModal({id:cat.id});}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.sub}}>✏️</button>
-                  <button onClick={(e)=>{e.stopPropagation();openAddTodo(cat.id);}} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
-                </div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><Bar pct={pct} color={cat.color}/><span style={{fontSize:11,fontWeight:700,color:cat.color,minWidth:28}}>{pct}%</span></div>
-              {vis.length===0&&items.length===0&&<div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0"}}>할 일을 추가해봐요 🌸</div>}
-              {vis.length===0&&items.length>0&&<div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0"}}>🎉 모두 완료!</div>}
-              {vis.map(item=>(
-                <div key={item.id} style={{padding:"6px 0",borderBottom:`1px dashed ${C.border}`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:18,height:18,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
-                    <span style={{flex:1,fontSize:13,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none",fontWeight:item.done?400:600}}>
-                      {!item.date&&<span style={{fontSize:10,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>{repeatIcon(item)} {repeatLabel(item)}</span>}{item.title}
-                    </span>
-                    <button onClick={()=>openEditTodo(cat.id,item)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.sub,padding:0,opacity:.6}}>✏️</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-        <div onClick={()=>{setCatForm({name:"",emoji:"⭐",color:C.pink3});setCatModal("add");}} style={{background:"#fff8fa",borderRadius:16,padding:"16px",border:`1.5px dashed ${C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6,color:C.sub,minHeight:100}} onMouseEnter={e=>e.currentTarget.style.background=C.pink1} onMouseLeave={e=>e.currentTarget.style.background="#fff8fa"}>
-          <span style={{fontSize:26}}>＋</span><span style={{fontSize:12,fontWeight:700}}>분류 추가</span>
-        </div>
-      </div>
-
-      {cats.filter(c=>c.hidden).length>0&&(
-        <div style={{marginTop:16}}>
-          <div style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6}}>숨긴 분류</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {cats.filter(c=>c.hidden).map(c=>(
-              confirmDeleteCatId===c.id ? (
-                <div key={c.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:99,background:"#FFF0F0",border:"1.5px solid #FFB3B3"}}>
-                  <span style={{fontSize:11,color:"#E63946",fontWeight:700}}>{c.emoji} {c.name} 영구 삭제할까요?</span>
-                  <button onClick={()=>{deleteCat(c.id);setConfirmDeleteCatId(null);}} style={{background:"#E63946",color:"white",border:"none",borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer"}}>삭제</button>
-                  <button onClick={()=>setConfirmDeleteCatId(null)} style={{background:C.pink1,color:C.sub,border:"none",borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer"}}>취소</button>
-                </div>
-              ) : (
-                <div key={c.id} style={{display:"flex",alignItems:"center",gap:2,padding:"4px 4px 4px 12px",borderRadius:99,background:C.white,border:`1.5px solid ${C.border}`,fontSize:12,color:C.sub,fontWeight:700}}>
-                  <span>{c.emoji} {c.name}</span>
-                  <button onClick={()=>showCat(c.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:C.rose,fontWeight:700,padding:"4px 8px"}}>복원</button>
-                  <button onClick={()=>setConfirmDeleteCatId(c.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#E63946",fontWeight:700,padding:"4px 8px"}}>삭제</button>
-                </div>
-              )
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TodayMobileView({selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, isRestDay, toggleRestDay}) {
-  return (
-    <div style={{flex:1,overflow:"auto",padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <div><div style={{fontSize:18,fontWeight:800,color:C.rose}}>{selDate===todayStr?"오늘":selDate}</div><div style={{fontSize:12,color:C.sub}}>{new Date(selDate).toLocaleDateString("ko-KR",{month:"long",day:"numeric",weekday:"short"})}</div></div>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>{const d=new Date(selDate);d.setDate(d.getDate()-1);setSelDate(fmtDate(d));}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:C.rose,fontWeight:800}}>‹</button>
-          <button onClick={()=>setSelDate(todayStr)} style={{background:C.pink2,border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:C.white,fontWeight:700,fontSize:12}}>오늘</button>
-          <button onClick={()=>{const d=new Date(selDate);d.setDate(d.getDate()+1);setSelDate(fmtDate(d));}} style={{background:C.pink1,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:C.rose,fontWeight:800}}>›</button>
-          <button onClick={()=>toggleRestDay(selDate)} style={{background:isRestDay(selDate)?"#7EC8A4":C.white,border:`1.5px solid ${isRestDay(selDate)?"#7EC8A4":C.border}`,borderRadius:8,padding:"6px 10px",cursor:"pointer",color:isRestDay(selDate)?C.white:C.sub,fontWeight:700,fontSize:12}}>🌿</button>
-        </div>
-      </div>
-      {isRestDay(selDate) ? (
-        <div style={{display:"flex",alignItems:"center",gap:12,background:"#F0FFF8",borderRadius:16,padding:"12px 16px",border:"1.5px solid #A5D6A7",marginBottom:14}}>
-          <span style={{fontSize:26}}>🌿</span>
-          <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"#2E7D32"}}>쉬는 중이에요</div><div style={{fontSize:12,color:C.sub}}>이 날은 달성률 계산에서 빠져요</div></div>
-        </div>
-      ) : (
-        <div style={{display:"flex",alignItems:"center",gap:12,background:C.white,borderRadius:16,padding:"12px 16px",border:`1.5px solid ${C.border}`,marginBottom:14}}>
-          <Ring pct={totalPctOn(selDate)} size={52} stroke={5} color={C.rose} bg={C.pink1}/>
-          <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:C.rose}}>총 달성률</div><div style={{fontSize:12,color:C.sub}}>{allTodosOn(selDate).filter(t=>t.done).length}/{allTodosOn(selDate).length} 완료</div></div>
-          <div style={{background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"7px 12px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:12}}>{cloudCode?"☁️ 연동중":"⚠️ 로컬"}</div>
-        </div>
-      )}
-
-      <WeeklyGrowthLog selDate={selDate} todos={todos} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} />
-
-      <div style={{fontSize:12,fontWeight:800,color:C.sub,marginBottom:8}}>✅ 할 일</div>
-      {activeCats.map(cat=>{
-        const items=visibleTodosOn(cat.id,selDate);
-        if(!items.length) return null;
-        const isHiding = hideCompleted[cat.id]!==false;
-        const vis = isHiding ? items.filter(t=>!t.done) : items;
-        const hiddenCount = items.filter(t=>t.done).length;
-        return (
-        <div key={cat.id} style={{background:C.white,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${C.border}`,marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,overflow:"hidden"}}><span style={{fontSize:16}}>{cat.emoji}</span><span style={{fontSize:13,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cat.name}</span></div>
-            <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-              <span style={{fontSize:11,fontWeight:700,color:cat.color}}>{catPctOn(cat.id,selDate)}%</span>
-              {hiddenCount>0&&<button onClick={()=>setHideCompleted(p=>({...p,[cat.id]:!isHiding}))} style={{padding:"3px 7px",borderRadius:99,border:`1.5px solid ${isHiding?cat.color:C.border}`,background:isHiding?cat.color+"22":C.white,color:isHiding?cat.color:C.sub,cursor:"pointer",fontSize:10,fontWeight:700}}>{isHiding?`숨김(${hiddenCount})`:"해제"}</button>}
-              <button onClick={()=>openAddTodo(cat.id)} style={{background:cat.color,border:"none",borderRadius:8,padding:"3px 10px",cursor:"pointer",color:C.white,fontWeight:800}}>+</button>
-            </div>
-          </div>
-          <div style={{height:4,borderRadius:99,background:C.pink1,overflow:"hidden",marginBottom:8}}><div style={{width:`${catPctOn(cat.id,selDate)}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
-          {vis.length===0&&<div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"6px 0"}}>🎉 모두 완료!</div>}
-          {vis.map(item=>(
-            <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${C.border}`}}>
-              <input type="checkbox" checked={item.done} onChange={()=>toggleTodo(cat.id,item.id,selDate)} style={{width:20,height:20,accentColor:cat.color,cursor:"pointer",flexShrink:0}}/>
-              <span style={{flex:1,fontSize:14,color:item.done?C.sub:C.text,textDecoration:item.done?"line-through":"none"}}>
-                {!item.date&&<span style={{fontSize:9,background:cat.color+"33",color:cat.color,borderRadius:4,padding:"1px 5px",marginRight:4}}>{repeatIcon(item)} {repeatLabel(item)}</span>}{item.title}
-              </span>
-            </div>
-          ))}
-        </div>
-      );})}
     </div>
   );
 }
@@ -843,10 +712,10 @@ function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, 
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(()=>window.innerWidth<768);
-  useEffect(()=>{ 
-    const h=()=>setIsMobile(window.innerWidth<768); 
-    window.addEventListener("resize",h); 
-    return ()=>window.removeEventListener("resize",h); 
+  useEffect(()=>{
+    const h=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener("resize",h);
+    return ()=>window.removeEventListener("resize",h);
   },[]);
 
   const [cloudCode] = useState(() => {
@@ -856,37 +725,18 @@ export default function App() {
     return load("jjanto_cloud_code", "");
   });
 
-  const [view,      setView]      = useState("list");
-  const [mobileTab, setMobileTab] = useState("today");
+  const [tab,       setTab]       = useState("week");
   const [selDate,   setSelDate]   = useState(todayStr);
   const [restDays,  setRestDays]  = useState(()=>load("jjanto_rest_days",[]));
   const [todos,     setTodos]     = useState(()=>{
-    const loaded = load("jjanto_todos", INIT_TODOS);
-    const cleaned = {};
-    Object.keys(loaded).forEach(cid=>{
-      if (cid === "weeklyTable") { cleaned[cid] = loaded[cid]; return; }
-      cleaned[cid] = (loaded[cid]||[]).map(t=>{
-        if (cid === "weekly") return t;
-        const type = t.date ? "single" : t.endDate ? "period" : "routine";
-        return cleanTodoItem(t, type);
-      });
-    });
-    if (!cleaned.weekly) cleaned.weekly = INIT_TODOS.weekly;
-    if (!cleaned.weeklyTable) cleaned.weeklyTable = { weeks: {} };
-    return cleaned;
+    const loaded = load("jjanto_todos", {});
+    return { ...loaded, weeklyTable: loaded.weeklyTable || { weeks: {} }, jjantech: loaded.jjantech || EMPTY_JJANTECH };
   });
   const [cats,      setCats]      = useState(()=>load("jjanto_cats",  CAT_DEFAULTS));
-  const [hideCompleted,setHideCompleted]=useState({});
-  const [shareCard, setShareCard] =useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [memos,     setMemos]     =useState(()=>load("jjanto_memos",[]));
   const [memoInput, setMemoInput] =useState("");
-  const cardRef=useRef(null);
 
-  const [todoModal, setTodoModal] =useState(null);
-  const [todoForm,  setTodoForm]  = useState({title:"", type:"single", date:"",startDate:todayStr,endDate:todayStr, repeatType:"daily",weekDays:[],monthDay:1});
-  const [catModal,  setCatModal]  =useState(null);
-  const [catForm,   setCatForm]   =useState({name:"",emoji:"⭐",color:C.pink3});
-  
   const [cloudStatus,setCloudStatus]= useState(null);
 
   const isLocalUpdating = useRef(false);
@@ -927,114 +777,135 @@ export default function App() {
   }
 
   const setTodosS   =v=>{ const n=typeof v==="function"?v(todos):v;    setTodos(n);    save("jjanto_todos",n);     triggerAutoSave(); };
-  const setCatsS    =v=>{ const n=typeof v==="function"?v(cats):v;     setCats(n);     save("jjanto_cats",n);      triggerAutoSave(); };
   const setMemosS   =v=>{ const n=typeof v==="function"?v(memos):v;    setMemos(n);    save("jjanto_memos",n);     triggerAutoSave(); };
   const setRestDaysS=v=>{ const n=typeof v==="function"?v(restDays):v; setRestDays(n); save("jjanto_rest_days",n); triggerAutoSave(); };
   const isRestDay = ds => restDays.includes(ds);
-
-  // 예전처럼 모든 주가 한 표를 공유하던 성장일지 데이터가 있으면(로컬이든 클라우드든) 주별 저장으로 한 번 옮겨줘요
-  useEffect(() => {
-    const migrated = migrateWeeklyTable(todos.weeklyTable, todayStr);
-    if (migrated) setTodosS(p => ({ ...p, weeklyTable: migrated }));
-  }, [todos.weeklyTable]);
   function toggleRestDay(ds) { setRestDaysS(p => p.includes(ds) ? p.filter(d=>d!==ds) : [...p, ds]); }
 
-  // 성장일지 행 수정 헬퍼: 해당 주(wk)의 rows만 바꾸고 다른 주 내용은 그대로 둬요
+  // 예전 성장일지 데이터가 있으면(로컬이든 클라우드든) 새 주간 표 형식으로 한 번 옮겨줘요
+  useEffect(() => {
+    const legacy = migrateWeeklyTable(todos.weeklyTable, todayStr);
+    const base = legacy || todos.weeklyTable;
+    const migrated = migrateWeeklyOff(base) || legacy;
+    if (migrated) setTodosS(p => ({ ...p, weeklyTable: migrated }));
+  }, [todos.weeklyTable]);
+
+  // 주간 표 행 수정 헬퍼: 해당 주(wk)의 rows만 바꾸고 다른 주 내용은 그대로 둬요
   function updateWeekRows(wk, fn) {
     setTodosS(p => {
       const table = p.weeklyTable || {};
-      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { rows: fn(getWeekRows(table, wk)) } } } };
+      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { v: 2, rows: fn(getWeekRows(table, wk)) } } } };
     });
   }
   function addWeeklyRow(wk) {
     updateWeekRows(wk, rows => {
       const color = WEEKLY_ROW_COLORS[rows.length % WEEKLY_ROW_COLORS.length];
-      return [...rows, { id: genId(), label: "새 항목", color, cells: emptyWeeklyCells(), checks: {} }];
+      return [...rows, { id: genId(), label: "새 항목", color, checks: {}, off: {} }];
     });
   }
   function updateWeeklyLabel(wk, rowId, label) {
     updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, label } : r));
   }
-  function updateWeeklyCell(wk, rowId, day, text) {
-    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, cells: { ...r.cells, [day]: text } } : r));
-  }
   function toggleWeeklyCheck(wk, rowId, day) {
     updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, checks: { ...r.checks, [day]: !(r.checks && r.checks[day]) } } : r));
+  }
+  function toggleWeeklyOff(wk, rowId, day) {
+    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, off: { ...r.off, [day]: !(r.off && r.off[day]) } } : r));
   }
   function removeWeeklyRow(wk, rowId) {
     updateWeekRows(wk, rows => rows.filter(r => r.id !== rowId));
   }
-  // 지난 주 계획을 이 주로 복사해요. withCells가 false면 항목 이름/색만 가져오고 칸은 비워둬요.
-  function copyWeekFrom(fromWk, toWk, withCells) {
+  // 지난주 항목(이름·색·안 하는 날)을 이번 주로 가져와요. 체크는 비운 채로 시작해요.
+  function copyWeekFrom(fromWk, toWk) {
     const src = getWeekRows(todos.weeklyTable, fromWk);
-    updateWeekRows(toWk, () => src.map(r => ({ id: genId(), label: r.label, color: r.color, cells: withCells ? { ...emptyWeeklyCells(), ...r.cells } : emptyWeeklyCells(), checks: {} })));
+    updateWeekRows(toWk, () => src.map(r => ({ id: genId(), label: r.label, color: r.color, checks: {}, off: { ...(r.off || {}) } })));
   }
 
-  function handleMoveCat(fromIndex, toIndex) {
-    const active = cats.filter(c=>!c.hidden), hidden = cats.filter(c=>c.hidden);
-    const updatedActive = [...active];
-    const [moved] = updatedActive.splice(fromIndex, 1);
-    updatedActive.splice(toIndex, 0, moved);
-    setCatsS([...updatedActive, ...hidden]);
+  // 짠테크 체크리스트
+  const jj = todos.jjantech || EMPTY_JJANTECH;
+  function updateJjantech(fn) {
+    setTodosS(p => ({ ...p, jjantech: fn(p.jjantech || EMPTY_JJANTECH) }));
   }
+  function toggleJjantech(ds, itemId) {
+    updateJjantech(j => {
+      const day = { ...((j.log || {})[ds] || {}) };
+      if (day[itemId]) delete day[itemId]; else day[itemId] = true;
+      return { ...j, log: { ...(j.log || {}), [ds]: day } };
+    });
+  }
+  function addJjantechItems(titles) {
+    updateJjantech(j => ({ ...j, items: [...(j.items || []), ...titles.map(title => ({ id: genId(), title, since: todayStr }))] }));
+  }
+  function renameJjantechItem(id, title) {
+    updateJjantech(j => ({ ...j, items: (j.items || []).map(it => it.id === id ? { ...it, title } : it) }));
+  }
+  function removeJjantechItem(id) {
+    updateJjantech(j => ({ ...j, items: (j.items || []).filter(it => it.id !== id) }));
+  }
+  function moveJjantechItem(id, dir) {
+    updateJjantech(j => {
+      const items = [...(j.items || [])];
+      const i = items.findIndex(it => it.id === id), k = i + dir;
+      if (i < 0 || k < 0 || k >= items.length) return j;
+      [items[i], items[k]] = [items[k], items[i]];
+      return { ...j, items };
+    });
+  }
+  function openJjantech(ds) { setSelDate(ds); setTab("jjantech"); }
 
   function addMemo(imgData = null) { if(!memoInput.trim() && !imgData) return; setMemosS(p=>[{id:genId(), text:memoInput.trim(), image:imgData, createdAt:new Date().toISOString()}, ...p]); setMemoInput(""); }
   function editMemo(id, text, imgData) { setMemosS(p=>p.map(m=>m.id===id?{...m,text,image:imgData,updatedAt:new Date().toISOString()}:m)); }
   function deleteMemo(id) { setMemosS(p=>p.filter(m=>m.id!==id)); }
 
-  const activeCats=cats.filter(c=>!c.hidden);
-  const isDone=(item,ds)=>item.date ? item.done : !!(item.doneLog && item.doneLog[ds]);
-  const allTodosOn=ds=>activeCats.flatMap(c=> (todos[c.id]||[]).filter(t=>!t.archived && itemAppliesOn(t, ds)).map(t=>({...t,done:isDone(t,ds)})) );
-  const visibleTodosOn=(cid,ds)=>(todos[cid]||[]).filter(t=>!t.archived&&itemAppliesOn(t, ds)).map(t=>({...t,done:isDone(t,ds)}));
-  const totalPctOn=ds=>{ const a=allTodosOn(ds); return a.length?Math.round(a.filter(t=>t.done).length/a.length*100):0; };
-  const catPctOn=(cid,ds)=>{ const i=(todos[cid]||[]).filter(t=>!t.archived && itemAppliesOn(t, ds)); return i.length?Math.round(i.filter(t=>isDone(t,ds)).length/i.length*100):0; };
-
-
-  function openAddTodo(cid){ setTodoForm({ title:"", type:"single", date:selDate, startDate:selDate||todayStr, endDate:selDate||todayStr, repeatType:"daily", weekDays:[], monthDay:1 }); setTodoModal({mode:"add",catId:cid}); }
-  function openEditTodo(cid,item){ setTodoForm({ title:item.title, type: item.date ? "single" : item.endDate ? "period" : "routine", date:item.date||"", startDate:item.startDate||todayStr, endDate:item.endDate||item.startDate||todayStr, repeatType:item.repeatType||"daily", weekDays:item.weekDays||[], monthDay:item.monthDay||1 }); setTodoModal({mode:"edit",catId:cid,item}); }
-  function saveTodo(){
-    if(!todoForm.title.trim()) return;
-    const {mode,catId,item}=todoModal;
-    let base;
-    if (todoForm.type === "single") base = { title: todoForm.title, date: todoForm.date, done: item?.done || false };
-    else if (todoForm.type === "period") base = { title: todoForm.title, date: "", startDate: todoForm.startDate, endDate: todoForm.endDate || todoForm.startDate, repeatType: "daily" };
-    else { base = { title: todoForm.title, date: "", startDate: todoForm.startDate, repeatType: todoForm.repeatType||"daily" }; if (todoForm.repeatType==="weekly") base.weekDays = todoForm.weekDays||[]; if (todoForm.repeatType==="monthly") base.monthDay = todoForm.monthDay||1; }
-
-    if(mode==="add") setTodosS(p=>({...p,[catId]:[...(p[catId]||[]),cleanTodoItem({id:genId(),...base,doneLog:{}},todoForm.type)]}));
-    else setTodosS(p=>({...p,[catId]:p[catId].map(t=>t.id===item.id?cleanTodoItem({...t,...base},todoForm.type):t)}));
-    setTodoModal(null);
-  }
-  function deleteTodo(cid,id){ const item=(todos[cid]||[]).find(t=>t.id===id); if(item && !item.date) { setTodosS(p=>({...p,[cid]:p[cid].map(t=>t.id===id?{...t,archived:true}:t)})); } else { setTodosS(p=>({...p,[cid]:p[cid].filter(t=>t.id!==id)})); } setTodoModal(null); }
-  function toggleTodo(cid,id,ds){ setTodosS(p=>({...p,[cid]:p[cid].map(t=>{ if(t.id!==id) return t; if(t.date) return {...t,done:!t.done}; const log={...(t.doneLog||{})}; if(log[ds]) delete log[ds]; else log[ds]=true; return {...t,doneLog:log}; })})); }
-  function saveCat(){ if(!catForm.name.trim()) return; if(catModal==="add"){ const nid=genId(); setCatsS(p=>[...p,{id:nid,...catForm,hidden:false}]); setTodosS(p=>({...p,[nid]:[]})); } else setCatsS(p=>p.map(c=>c.id===catModal.id?{...c,...catForm}:c)); setCatModal(null); }
-  function hideCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:true}:c)); setCatModal(null); }
-  function showCat(id){ setCatsS(p=>p.map(c=>c.id===id?{...c,hidden:false}:c)); }
-  function deleteCat(id){ setCatsS(p=>p.filter(c=>c.id!==id)); setTodosS(p=>{ const n={...p}; delete n[id]; return n; }); }
-
-  const commonProps = { isMobile, selDate, setSelDate, todayStr, allTodosOn, totalPctOn, catPctOn, activeCats, todos, visibleTodosOn, toggleTodo, openAddTodo, hideCompleted, setHideCompleted, cloudCode, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, removeWeeklyRow, copyWeekFrom, isRestDay, toggleRestDay };
-  const weekDaysInvalid = todoForm.type==="routine" && todoForm.repeatType==="weekly" && (!todoForm.weekDays||todoForm.weekDays.length===0);
+  const wk = getMonday(selDate);
+  const stats = computeWeekStats(todos.weeklyTable, jj, wk, isRestDay);
+  const prevWeekKey = findPrevWeekKey(todos.weeklyTable, wk);
 
   const cloudBadge = (
-    <div style={{display:"flex",alignItems:"center",gap:6,background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"5px 10px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:11,flexShrink:0}}>
+    <div title={cloudStatus?.text} style={{display:"flex",alignItems:"center",gap:6,background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"5px 10px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:11,flexShrink:0}}>
       {cloudCode?"☁️ 연동중":"⚠️ 로컬"}
     </div>
   );
 
+  const TABS = [
+    {tab:"week",    icon:"📊",  label:"주간표"},
+    {tab:"jjantech",icon:"📱",  label:"짠테크"},
+    {tab:"memo",    icon:"🗒️", label:"메모"},
+    {tab:"archive", icon:"📦",  label:"보관함"},
+  ];
+
+  const content = (
+    <>
+      {tab==="week"&&(
+        <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
+          <WeeklyBoard selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} prevWeekKey={prevWeekKey} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
+        </div>
+      )}
+      {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
+      {tab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
+      {tab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
+    </>
+  );
+
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Nunito','Apple SD Gothic Neo',sans-serif",background:C.bg,color:C.text,overflow:"hidden",flexDirection:"column"}}>
+      <style>{`
+        @keyframes tomato-bounce {
+          from { transform: translateY(0px) rotate(-5deg); }
+          to   { transform: translateY(-4px) rotate(5deg); }
+        }
+      `}</style>
       {!isMobile&&(
         <div style={{display:"flex",flex:1,flexDirection:"column",overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderBottom:`1.5px solid ${C.border}`,background:C.white,flexWrap:"wrap"}}>
             <span style={{fontSize:16,fontWeight:800,color:C.rose}}>🍅 짠토의 플래너</span>
             {cloudBadge}
             <div style={{flex:1}}/>
-            {[["list","✅ 할일"],["memo","🗒️ 메모"],["archive","📦 보관함"]].map(([v,lb])=>(
-              <button key={v} onClick={()=>setView(v)} style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${view===v?C.rose:C.border}`,background:view===v?C.rose:C.white,color:view===v?C.white:C.sub,fontSize:12,cursor:"pointer",fontWeight:700}}>{lb}</button>
+            {TABS.map(({tab:v,icon,label})=>(
+              <button key={v} onClick={()=>setTab(v)} style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${tab===v?C.rose:C.border}`,background:tab===v?C.rose:C.white,color:tab===v?C.white:C.sub,fontSize:12,cursor:"pointer",fontWeight:700}}>{icon} {label}</button>
             ))}
           </div>
-          {view==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
-          {view==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
-          {view==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
+          {content}
         </div>
       )}
 
@@ -1045,142 +916,21 @@ export default function App() {
             {cloudBadge}
           </div>
           <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            {mobileTab==="list"&&<ListView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} allTodosOn={allTodosOn} totalPctOn={totalPctOn} catPctOn={catPctOn} activeCats={activeCats} todos={todos} isDone={isDone} visibleTodosOn={visibleTodosOn} openAddTodo={openAddTodo} openEditTodo={openEditTodo} toggleTodo={toggleTodo} hideCompleted={hideCompleted} setHideCompleted={setHideCompleted} setCatForm={setCatForm} setCatModal={setCatModal} setShareCard={setShareCard} onMoveCat={handleMoveCat} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} cats={cats} showCat={showCat} deleteCat={deleteCat} isRestDay={isRestDay} toggleRestDay={toggleRestDay} />}
-            {mobileTab==="today"&&<TodayMobileView {...commonProps} openEditTodo={openEditTodo}/>}
-            {mobileTab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
-            {mobileTab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
+            {content}
           </div>
-          <div style={{display:"flex",borderTop:`1.5px solid ${C.border}`,background:C.white,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
-            {[
-              {tab:"today",  icon:"✨",  label:"오늘"},
-              {tab:"list",   icon:"✅",  label:"할일"},
-              {tab:"memo",   icon:"🗒️", label:"메모"},
-              {tab:"archive",icon:"📦",  label:"보관함"},
-            ].map(({tab,icon,label})=>(
-              <button key={tab} onClick={()=>setMobileTab(tab)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0",border:"none",background:"transparent",cursor:"pointer",color:mobileTab===tab?C.rose:C.sub,gap:1}}>
+          <div style={{display:"flex",background:C.white,borderTop:`1.5px solid ${C.border}`,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
+            {TABS.map(({tab:v,icon,label})=>(
+              <button key={v} onClick={()=>setTab(v)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"7px 0",border:"none",background:"transparent",cursor:"pointer",color:tab===v?C.rose:C.sub,gap:1}}>
                 <span style={{fontSize:18}}>{icon}</span>
-                <span style={{fontSize:9,fontWeight:mobileTab===tab?800:500}}>{label}</span>
-                {mobileTab===tab&&<div style={{width:16,height:3,borderRadius:99,background:C.rose,marginTop:1}}/>}
+                <span style={{fontSize:9,fontWeight:tab===v?800:500}}>{label}</span>
+                {tab===v&&<div style={{width:16,height:3,borderRadius:99,background:C.rose,marginTop:1}}/>}
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {todoModal&&(
-        <ModalWrap onClose={()=>setTodoModal(null)} isMobile={isMobile}>
-          <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16}}>🌸 할 일 {todoModal.mode==="add"?"추가":"편집"}</div>
-          <KoreanInput key={todoModal?.item?.id||"new-todo"} style={inp} placeholder="할 일 내용" value={todoForm.title||""} onChange={v=>setTodoForm(p=>({...p,title:v}))} autoFocus/>
-          <div style={{display:"flex", gap:8, marginBottom:16}}>
-            {[ {v:"single", lb:"하루 할 일", ic:"✅"}, {v:"period", lb:"기간 (여러 날)", ic:"🗓️"}, {v:"routine", lb:"반복 루틴", ic:"🔁"} ].map(opt => (
-              <button key={opt.v} onClick={()=>setTodoForm(p=>({...p, type:opt.v}))} style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"12px 0", borderRadius:12, border:`2px solid ${todoForm.type===opt.v?C.rose:C.border}`, background:todoForm.type===opt.v?C.rose+"12":C.white, color:todoForm.type===opt.v?C.rose:C.sub, fontWeight:todoForm.type===opt.v?800:600, fontSize:12, cursor:"pointer"}}><span style={{fontSize:20}}>{opt.ic}</span>{opt.lb}</button>
-            ))}
-          </div>
-          {todoForm.type === "single" && (
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 날짜</label>
-              <input type="date" style={{...inp,marginBottom:0}} value={todoForm.date||""} onChange={e=>setTodoForm(p=>({...p,date:e.target.value}))}/>
-            </div>
-          )}
-          {todoForm.type === "period" && (
-            <div style={{display:"flex",gap:10,marginBottom:12}}>
-              <div style={{flex:1}}>
-                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🟢 시작일</label>
-                <input type="date" style={{...inp,marginBottom:0}} value={todoForm.startDate||""} onChange={e=>setTodoForm(p=>({...p,startDate:e.target.value, endDate: p.endDate && p.endDate < e.target.value ? e.target.value : p.endDate}))}/>
-              </div>
-              <div style={{flex:1}}>
-                <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>🔴 종료일</label>
-                <input type="date" style={{...inp,marginBottom:0}} value={todoForm.endDate||todoForm.startDate||""} min={todoForm.startDate} onChange={e=>setTodoForm(p=>({...p,endDate:e.target.value}))}/>
-              </div>
-            </div>
-          )}
-          {todoForm.type === "routine" && (
-            <>
-              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>반복 주기</label>
-              <div style={{display:"flex",gap:6,marginBottom:12}}>
-                {[["daily","매일","☀️"],["alternate","격일","⚡"],["weekly","매주","📅"],["monthly","매월","🗓️"]].map(([val,lb,ic])=>(
-                  <button key={val} onClick={()=>setTodoForm(p=>({...p,repeatType:val}))} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"8px 0",borderRadius:10,border:`2px solid ${todoForm.repeatType===val?C.rose:C.border}`,background:todoForm.repeatType===val?C.rose+"18":C.white,color:todoForm.repeatType===val?C.rose:C.sub,fontWeight:700,fontSize:12,cursor:"pointer"}}>{ic} {lb}</button>
-                ))}
-              </div>
-              {todoForm.repeatType==="alternate"&&(<div style={{marginBottom:12, padding:"9px 12px", background:"#FFF0F5", borderRadius:10, border:`1px solid ${C.border}`, fontSize:11, color:C.rose, lineHeight:1.5}}>💡 <b>루틴 시작일({todoForm.startDate||todayStr})</b>을 기준으로 <b>하루 걸러 하루씩(2일 간격)</b> 플래너에 나타나요!</div>)}
-              {todoForm.repeatType==="weekly"&&(
-                <div style={{marginBottom:12}}>
-                  <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>요일 선택 (여러 개 가능)</label>
-                  <div style={{display:"flex",gap:5,marginBottom:8}}>
-                    {DAYS_KO.map((d,i)=>{ const sel=(todoForm.weekDays||[]).includes(i); return (
-                      <button key={i} onClick={()=>setTodoForm(p=>{ const cur=p.weekDays||[]; return {...p, weekDays: cur.includes(i)?cur.filter(x=>x!==i):[...cur,i].sort()}; })} style={{flex:1,padding:"8px 0",borderRadius:10,border:`2px solid ${sel?C.rose:C.border}`,background:sel?C.rose:C.white,color:sel?C.white:[0,6].includes(i)?C.pink3:C.sub,fontWeight:800,fontSize:13,cursor:"pointer"}}>{d}</button>
-                    );})}
-                  </div>
-                  <div style={{display:"flex",gap:6}}>
-                    {[["평일",[1,2,3,4,5]],["주말",[0,6]]].map(([lb,vals])=>{
-                      const cur=todoForm.weekDays||[]; const isActive = vals.length===cur.length && vals.every(v=>cur.includes(v));
-                      return <button key={lb} onClick={()=>setTodoForm(p=>({...p, weekDays: isActive ? [] : [...vals].sort()}))} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1.5px solid ${isActive?C.rose:C.border}`,background:isActive?C.rose+"18":"#FFF8FA",color:isActive?C.rose:C.sub,fontWeight:700,fontSize:11,cursor:"pointer"}}>{lb}</button>;
-                    })}
-                  </div>
-                  {weekDaysInvalid&&<div style={{fontSize:10,color:C.tomato,marginTop:5}}>⚠️ 요일을 하나 이상 선택해주세요</div>}
-                </div>
-              )}
-              {todoForm.repeatType==="monthly"&&(
-                <div style={{marginBottom:12}}>
-                  <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:6,display:"block"}}>매월 며칠</label>
-                  <select value={todoForm.monthDay||1} onChange={e=>setTodoForm(p=>({...p,monthDay:Number(e.target.value)}))} style={{...inp,marginBottom:0,cursor:"pointer"}}>
-                    {Array.from({length:31}).map((_,i)=><option key={i+1} value={i+1}>{i+1}일</option>)}
-                  </select>
-                  <div style={{fontSize:10,color:C.sub,marginTop:4}}>31일이 없는 달은 자동으로 건너뛰어요</div>
-                </div>
-              )}
-              <label style={{fontSize:11,fontWeight:800,color:C.sub,marginBottom:4,display:"block"}}>📅 루틴 시작일</label>
-              <input type="date" style={{...inp,marginBottom:0}} value={todoForm.startDate||todayStr} onChange={e=>setTodoForm(p=>({...p,startDate:e.target.value}))}/>
-              <div style={{fontSize:10,color:C.sub,marginTop:4,marginBottom:4}}>이 날짜부터 달성률에 반영돼요</div>
-            </>
-          )}
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
-            {todoModal.mode==="edit"&&<><button onClick={()=>deleteTodo(todoModal.catId,todoModal.item.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#ffe4e4",color:C.tomato}}>삭제</button>{todoForm.type==="routine"&&<span style={{fontSize:10,color:C.sub,alignSelf:"center"}}>📦 과거기록 보존</span>}</> }
-            <button onClick={()=>setTodoModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
-            <button onClick={saveTodo} disabled={weekDaysInvalid} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:weekDaysInvalid?"default":"pointer",fontWeight:800,background:weekDaysInvalid?C.pink1:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:weekDaysInvalid?C.sub:C.white}}>저장</button>
-          </div>
-        </ModalWrap>
-      )}
-
-      {catModal&&(
-        <ModalWrap onClose={()=>setCatModal(null)} isMobile={isMobile}>
-          <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16}}>🍅 분류 {catModal==="add"?"추가":"편집"}</div>
-          <KoreanInput key={"emoji-"+(catModal?.id||"new")} style={inp} placeholder="이모지" value={catForm.emoji||""} onChange={v=>setCatForm(p=>({...p,emoji:v}))}/>
-          <KoreanInput key={"name-"+(catModal?.id||"new")} style={inp} placeholder="분류 이름" value={catForm.name||""} onChange={v=>setCatForm(p=>({...p,name:v}))} autoFocus/>
-          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-            {[C.rose,C.tomato,C.pink3,C.pink2,"#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC"].map(c=><div key={c} onClick={()=>setCatForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:"50%",background:c,cursor:"pointer",outline:catForm.color===c?`3px solid ${c}`:"none",outlineOffset:2}}/>)}
-          </div>
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            {catModal!=="add"&&<button onClick={()=>hideCat(catModal.id)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:"#fff3e0",color:"#E65100"}}>숨기기</button>}
-            <button onClick={()=>setCatModal(null)} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>취소</button>
-            <button onClick={saveCat} style={{padding:"8px 18px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>저장</button>
-          </div>
-          {catModal!=="add"&&<div style={{marginTop:10,fontSize:11,color:C.sub,textAlign:"center"}}>💡 숨기기는 기록을 보존해요</div>}
-        </ModalWrap>
-      )}
-
-      {shareCard&&(
-        <ModalWrap onClose={()=>setShareCard(false)} zIndex={300} isMobile={isMobile}>
-          <div style={{fontSize:15,fontWeight:800,color:C.rose,marginBottom:16,textAlign:"center"}}>📸 오늘의 달성률 카드</div>
-          <div ref={cardRef} style={{background:"linear-gradient(135deg,#fff0f3,#ffe4ec)",borderRadius:20,padding:"24px 20px",border:`2px solid ${C.border}`,marginBottom:16}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-              <div><div style={{fontSize:18,fontWeight:800,color:C.rose}}>🍅 짠토의 플래너</div><div style={{fontSize:12,color:C.sub}}>{selDate}</div></div>
-              <Ring pct={totalPctOn(selDate)} size={66} stroke={7} color={C.rose} bg={C.pink1}/>
-            </div>
-            {activeCats.map(cat=>{ const pct=catPctOn(cat.id,selDate); const items=(todos[cat.id]||[]).filter(t=>!t.archived&&itemAppliesOn(t,selDate)).map(t=>({...t,done:isDone(t,selDate)})); if(!items.length) return null; return (
-              <div key={cat.id} style={{background:"rgba(255,255,255,0.7)",borderRadius:12,padding:"10px 14px",marginBottom:8}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}><div style={{display:"flex",alignItems:"center",gap:6}}><span>{cat.emoji}</span><span style={{fontSize:13,fontWeight:700}}>{cat.name}</span></div><span style={{fontSize:13,fontWeight:800,color:cat.color}}>{pct}%</span></div>
-                <div style={{height:7,borderRadius:99,background:C.pink1,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:cat.color}}/></div>
-              </div>
-            );})}
-            <div style={{marginTop:14,textAlign:"center",fontSize:12,color:C.sub,fontWeight:600}}>{totalPctOn(selDate)===100?"🎉 오늘 모두 완료! 최고예요!":totalPctOn(selDate)>=50?"🌸 절반 이상 달성!":"🍅 오늘도 화이팅!"}</div>
-          </div>
-          <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-            <button onClick={()=>{ const card=cardRef.current; if(!card) return; import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").then(()=>{ window.html2canvas(card,{scale:2}).then(canvas=>{ const a=document.createElement("a"); a.download=`짠토_${selDate}.png`; a.href=canvas.toDataURL(); a.click(); }); }).catch(()=>alert("카드를 길게 눌러 저장해봐요!")); }} style={{padding:"10px 22px",borderRadius:12,border:"none",cursor:"pointer",fontWeight:800,background:`linear-gradient(135deg,${C.pink3},${C.rose})`,color:C.white}}>💾 이미지 저장</button>
-            <button onClick={()=>setShareCard(false)} style={{padding:"10px 18px",borderRadius:12,border:"none",cursor:"pointer",fontWeight:700,background:C.pink1,color:C.sub}}>닫기</button>
-          </div>
-        </ModalWrap>
-      )}
+      {summaryOpen&&<SummaryCardModal isMobile={isMobile} stats={stats} wk={wk} onClose={()=>setSummaryOpen(false)}/>}
     </div>
   );
 }
