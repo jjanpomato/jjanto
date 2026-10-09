@@ -508,6 +508,21 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
           )}
         </div>
 
+        {/* 편집할 때 맨 위에 보여서 바로 찾을 수 있게 해요 */}
+        {editMode && items.length > 0 && (
+          confirmClear ? (
+            <div style={{ marginBottom: 12, padding: "12px 14px", background: "#FFF0F0", borderRadius: 12, border: "1.5px solid #FFB3B3" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#E63946", marginBottom: 8 }}>⚠️ 짠테크 항목 {items.length}개를 모두 지울까요? 지운 뒤 '예전 할일에서 불러오기'로 다시 가져올 수 있어요.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.pink1, color: C.sub, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>취소</button>
+                <button onClick={() => { clearJjantechItems(); setConfirmClear(false); }} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: "#E63946", color: "white", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>모두 지우기</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmClear(true)} style={{ marginBottom: 12, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid #FFB3B3", background: "#FFF0F0", color: "#E63946", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑️ 짠테크 항목 전체 비우기</button>
+          )
+        )}
+
         {!editMode && hideDone && items.length > 0 && visible.length === 0 && (
           <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: C.sub, fontWeight: 700 }}>🎉 오늘 짠테크 모두 끝!</div>
         )}
@@ -552,19 +567,6 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
           </div>
         )}
 
-        {editMode && items.length > 0 && (
-          confirmClear ? (
-            <div style={{ marginTop: 12, padding: "12px 14px", background: "#FFF0F0", borderRadius: 12, border: "1.5px solid #FFB3B3" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#E63946", marginBottom: 8 }}>⚠️ 짠테크 항목 {items.length}개를 모두 지울까요? 지운 뒤 '예전 할일에서 불러오기'로 다시 가져올 수 있어요.</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.pink1, color: C.sub, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>취소</button>
-                <button onClick={() => { clearJjantechItems(); setConfirmClear(false); }} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: "#E63946", color: "white", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>모두 지우기</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmClear(true)} style={{ marginTop: 12, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid #FFB3B3", background: "#FFF0F0", color: "#E63946", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑️ 짠테크 항목 전체 비우기</button>
-          )
-        )}
       </div>
     </div>
   );
