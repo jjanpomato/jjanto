@@ -34,6 +34,13 @@ function getWeekRows(table, wk) {
   const week = table && table.weeks && table.weeks[wk];
   return (week && Array.isArray(week.rows)) ? week.rows : [];
 }
+// 이번 주를 아직 안 건드렸으면 가장 최근 주의 항목·칸 내용을 그대로 이어받아요(체크만 비운 채로).
+// 처음 체크하거나 고치는 순간 이번 주 것으로 따로 저장돼요.
+function getEffectiveWeekRows(table, wk) {
+  if (table && table.weeks && table.weeks[wk]) return getWeekRows(table, wk);
+  const prev = findPrevWeekKey(table, wk);
+  return prev ? getWeekRows(table, prev).map(r => ({ ...r, checks: {} })) : [];
+}
 function hasWeekData(table, wk) {
   return getWeekRows(table, wk).length > 0;
 }
@@ -92,16 +99,13 @@ function weekRangeLabel(wk) {
   return `${mon.getMonth()+1}/${mon.getDate()} ~ ${fri.getMonth()+1}/${fri.getDate()}`;
 }
 
-// 짠테크 항목은 추가한 날(since)부터 세요. 그래야 짠테크를 만들기 전 주의 달성률이 바뀌지 않아요.
-function jjItemsOn(jj, ds) { return ((jj && jj.items) || []).filter(it => !it.since || it.since <= ds); }
-
 // 한 주(월~금)의 일간·주간 달성률을 계산해요.
 // 표의 각 칸 + 짠테크 한 줄(그날 체크리스트를 전부 끝내야 완료)로 세고, 🌿쉼으로 표시한 날은 빼요.
 function computeWeekStats(table, jj, wk, isRestDay) {
-  const rows = getWeekRows(table, wk);
+  const rows = getEffectiveWeekRows(table, wk);
   const days = weekdayDates(wk).map(d => {
     const rest = isRestDay(d.ds);
-    const jjItems = jjItemsOn(jj, d.ds);
+    const jjItems = (jj && jj.items) || [];
     const dayLog = (jj && jj.log && jj.log[d.ds]) || {};
     const jjDone = jjItems.filter(it => dayLog[it.id]).length;
     let total = 0, done = 0;
@@ -234,7 +238,7 @@ function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
 
 // 주간 표: 행 = 매일 하는 항목, 열 = 월~금. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
 // 짠테크는 항목이 많아서 표에는 "짠테크" 한 줄로만 들어가고, 그날 체크리스트를 다 끝내면 완료로 쳐요.
-function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggleRestDay, addWeeklyRow, updateWeeklyLabel, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, copyWeekFrom, openJjantech, openSummary }) {
+function WeeklyBoard({ selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, openJjantech, openSummary }) {
   const [editMode, setEditMode] = useState(false);
   const captureRef = useRef(null);
   const wk = getMonday(selDate);
@@ -251,8 +255,8 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggle
     else saveNodeAsImage(captureRef.current, fname);
   }
 
-  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: 110 };
-  const cellTd = d => ({ padding: "8px 2px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
+  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: 76 };
+  const cellTd = d => ({ minWidth: 50, padding: "8px 1px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -266,7 +270,7 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggle
         </button>
       </div>
 
-      <div ref={captureRef} style={{ background: C.white, borderRadius: 16, padding: 14, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}` }}>
+      <div ref={captureRef} style={{ background: C.white, borderRadius: 16, padding: 10, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg,#FFF3F1,#FFE2D8)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
           <Ring pct={stats.pct || 0} size={60} stroke={7} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -285,7 +289,7 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggle
                 {days.map(d => {
                   const isToday = d.ds === todayStr;
                   return (
-                    <th key={d.key} onClick={editMode ? () => toggleRestDay(d.ds) : undefined} style={{ minWidth: 44, padding: "4px 2px 6px", borderBottom: `1.5px solid ${C.border}`, cursor: editMode ? "pointer" : "default", background: isToday ? C.rose + "0D" : "transparent" }}>
+                    <th key={d.key} onClick={editMode ? () => toggleRestDay(d.ds) : undefined} style={{ minWidth: 50, padding: "4px 2px 6px", borderBottom: `1.5px solid ${C.border}`, cursor: editMode ? "pointer" : "default", background: isToday ? C.rose + "0D" : "transparent" }}>
                       <div style={{ fontSize: 13, fontWeight: 900, color: isToday ? C.rose : C.text }}>{d.label}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? C.rose : C.sub }}>{d.rest ? "🌿" : Number(d.ds.slice(8))}</div>
                     </th>
@@ -301,24 +305,31 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggle
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
                       {editMode ? (
-                        <KoreanInput key={"rowlabel-" + wk + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(wk, row.id, v)} style={{ width: 76, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                        <KoreanInput key={"rowlabel-" + wk + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(wk, row.id, v)} style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
                       ) : (
-                        <span style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text, wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.3 }}>{row.label}</span>
                       )}
                     </div>
                   </td>
                   {days.map(d => {
                     const off = !!(row.off && row.off[d.key]);
                     const checked = !!(row.checks && row.checks[d.key]);
+                    const text = (row.cells && row.cells[d.key]) || "";
                     return (
-                      <td key={d.key} style={cellTd(d)}>
-                        <div style={{ display: "flex", justifyContent: "center" }}>
+                      <td key={d.key} style={{ ...cellTd(d), verticalAlign: "top" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                           {editMode ? (
-                            <button onClick={() => toggleWeeklyOff(wk, row.id, d.key)} style={{ width: 26, height: 22, borderRadius: 7, border: `1.5px dashed ${off ? C.border : C.pink2}`, background: off ? "#F5EEEC" : C.white, color: off ? C.sub : C.pink3, fontWeight: 900, fontSize: 12, cursor: "pointer", padding: 0 }}>{off ? "—" : "○"}</button>
+                            <>
+                              <KoreanInput key={"cell-" + wk + "-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(wk, row.id, d.key, v)} placeholder="할 일" style={{ width: 48, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, textAlign: "center", outline: "none", background: off ? "#F5EEEC" : "#FFF8FA", color: C.text, padding: "4px 2px", fontFamily: "inherit" }} />
+                              <button onClick={() => toggleWeeklyOff(wk, row.id, d.key)} style={{ border: "none", borderRadius: 6, padding: "2px 6px", fontSize: 10, fontWeight: 800, cursor: "pointer", background: off ? C.sub : C.pink1, color: off ? C.white : C.sub, fontFamily: "inherit" }}>{off ? "안 함" : "함"}</button>
+                            </>
                           ) : off ? (
-                            <span style={{ color: C.pink2, fontWeight: 900, fontSize: 13 }}>—</span>
+                            <span style={{ color: C.pink2, fontWeight: 900, fontSize: 13, lineHeight: "22px" }}>—</span>
                           ) : (
-                            <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(wk, row.id, d.key)} />
+                            <>
+                              <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(wk, row.id, d.key)} />
+                              {text && <span style={{ fontSize: 11, lineHeight: 1.3, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 52, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{text}</span>}
+                            </>
                           )}
                         </div>
                       </td>
@@ -373,15 +384,13 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, prevWeekKey, toggle
         </div>
       </div>
 
-      {rows.length === 0 && prevWeekKey && (
-        <button onClick={() => copyWeekFrom(prevWeekKey, wk)} style={{ marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px solid ${C.rose}`, background: C.white, color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📋 지난주 항목 그대로 가져오기</button>
-      )}
 
       {editMode && (
         <>
           <button onClick={() => addWeeklyRow(wk)} style={{ marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>＋ 항목 추가</button>
           <div style={{ marginTop: 8, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" }}>
-            💡 칸(○)을 누르면 <b>—</b>로 바뀌어요. — 칸은 "그날은 안 하는 날"이라 달성률에서 빠져요.<br />
+            ✏️ 칸마다 그날 할 일을 적을 수 있어요. 적은 내용은 다음 주에도 그대로 이어져요.<br />
+            💡 칸 아래 <b>함/안 함</b>을 누르면 그날은 <b>—</b>로 빠지고, 달성률에도 안 들어가요.<br />
             🌿 요일 이름을 누르면 그날 전체가 쉼(공휴일 등)으로 빠져요.<br />
             📱 짠테크 줄은 짠테크 탭에 항목을 넣으면 자동으로 생겨요.
           </div>
@@ -446,13 +455,12 @@ function SummaryCardModal({ isMobile, stats, wk, onClose }) {
 }
 
 // 짠테크 매일 체크리스트: 항목은 한 번만 만들어두고, 체크는 날짜별로 따로 저장돼서 매일 새로 시작해요
-function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, toggleJjantech, addJjantechItems, renameJjantechItem, removeJjantechItem, moveJjantechItem }) {
+function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSources, importFromCat, toggleJjantech, addJjantechItems, renameJjantechItem, removeJjantechItem, moveJjantechItem }) {
   const [editMode, setEditMode] = useState(false);
   const [hideDone, setHideDone] = useState(false);
   const [bulk, setBulk] = useState("");
   const [bulkKey, setBulkKey] = useState(0);
-  // 편집할 땐 모든 항목을, 체크할 땐 그날 이미 있던 항목만 보여줘요
-  const items = editMode ? (jj.items || []) : jjItemsOn(jj, selDate);
+  const items = jj.items || [];
   const log = (jj.log && jj.log[selDate]) || {};
   const done = items.filter(it => log[it.id]).length;
   const pct = items.length ? Math.round(done / items.length * 100) : 0;
@@ -484,7 +492,7 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, toggleJjant
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>📱 오늘의 짠테크</div>
             <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 2 }}>
-              {items.length ? `${done}/${items.length}개 완료${done === items.length ? " · 완주! 🎉" : ""}` : (jj.items || []).length ? "이 날엔 아직 짠테크 항목이 없었어요" : "편집을 눌러 짠테크 항목을 넣어봐요"}
+              {items.length ? `${done}/${items.length}개 완료${done === items.length ? " · 완주! 🎉" : ""}` : "편집을 눌러 짠테크 항목을 넣어봐요"}
             </div>
             {weekend && <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>🌿 주말은 보충데이라 달성률에 안 들어가요</div>}
           </div>
@@ -516,6 +524,18 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, toggleJjant
             );
           })}
         </div>
+
+        {(editMode || items.length === 0) && importSources.length > 0 && (
+          <div style={{ marginTop: 12, background: C.white, borderRadius: 12, padding: 12, border: `1.5px solid ${C.border}` }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.rose, marginBottom: 4 }}>📦 예전 할일에서 불러오기</div>
+            <div style={{ fontSize: 11, color: C.sub, marginBottom: 8 }}>예전에 분류별로 적어둔 할일을 짠테크 항목으로 한 번에 가져와요. 이미 있는 이름은 건너뛰어요.</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {importSources.map(({ cat, count }) => (
+                <button key={cat.id} onClick={() => importFromCat(cat.id)} style={{ padding: "6px 12px", borderRadius: 99, border: `1.5px solid ${cat.color}`, background: cat.color + "18", color: C.text, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{cat.emoji} {cat.name} ({count}개)</button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {editMode && (
           <div style={{ marginTop: 12, background: C.white, borderRadius: 12, padding: 12, border: `1.5px dashed ${C.rose}` }}>
@@ -794,17 +814,20 @@ export default function App() {
   function updateWeekRows(wk, fn) {
     setTodosS(p => {
       const table = p.weeklyTable || {};
-      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { v: 2, rows: fn(getWeekRows(table, wk)) } } } };
+      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { v: 2, rows: fn(getEffectiveWeekRows(table, wk)) } } } };
     });
   }
   function addWeeklyRow(wk) {
     updateWeekRows(wk, rows => {
       const color = WEEKLY_ROW_COLORS[rows.length % WEEKLY_ROW_COLORS.length];
-      return [...rows, { id: genId(), label: "새 항목", color, checks: {}, off: {} }];
+      return [...rows, { id: genId(), label: "새 항목", color, cells: emptyWeeklyCells(), checks: {}, off: {} }];
     });
   }
   function updateWeeklyLabel(wk, rowId, label) {
     updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, label } : r));
+  }
+  function updateWeeklyCell(wk, rowId, day, text) {
+    updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, cells: { ...emptyWeeklyCells(), ...r.cells, [day]: text } } : r));
   }
   function toggleWeeklyCheck(wk, rowId, day) {
     updateWeekRows(wk, rows => rows.map(r => r.id === rowId ? { ...r, checks: { ...r.checks, [day]: !(r.checks && r.checks[day]) } } : r));
@@ -814,11 +837,6 @@ export default function App() {
   }
   function removeWeeklyRow(wk, rowId) {
     updateWeekRows(wk, rows => rows.filter(r => r.id !== rowId));
-  }
-  // 지난주 항목(이름·색·안 하는 날)을 이번 주로 가져와요. 체크는 비운 채로 시작해요.
-  function copyWeekFrom(fromWk, toWk) {
-    const src = getWeekRows(todos.weeklyTable, fromWk);
-    updateWeekRows(toWk, () => src.map(r => ({ id: genId(), label: r.label, color: r.color, checks: {}, off: { ...(r.off || {}) } })));
   }
 
   // 짠테크 체크리스트
@@ -834,7 +852,20 @@ export default function App() {
     });
   }
   function addJjantechItems(titles) {
-    updateJjantech(j => ({ ...j, items: [...(j.items || []), ...titles.map(title => ({ id: genId(), title, since: todayStr }))] }));
+    updateJjantech(j => ({ ...j, items: [...(j.items || []), ...titles.map(title => ({ id: genId(), title }))] }));
+  }
+  // 예전 분류별 할일(보관함)에서 제목만 가져와 짠테크 항목으로 넣어요. 같은 이름은 한 번만 들어가요.
+  const importSources = cats
+    .map(cat => ({ cat, count: (Array.isArray(todos[cat.id]) ? todos[cat.id] : []).filter(t => !t.archived && (t.title || "").trim()).length }))
+    .filter(x => x.count > 0)
+    .sort((a, b) => (b.cat.name.includes("짠테크") ? 1 : 0) - (a.cat.name.includes("짠테크") ? 1 : 0));
+  function importFromCat(catId) {
+    const titles = (todos[catId] || []).filter(t => !t.archived).map(t => (t.title || "").trim()).filter(Boolean);
+    updateJjantech(j => {
+      const have = new Set((j.items || []).map(it => it.title.trim()));
+      const fresh = [...new Set(titles)].filter(t => !have.has(t));
+      return { ...j, items: [...(j.items || []), ...fresh.map(title => ({ id: genId(), title }))] };
+    });
   }
   function renameJjantechItem(id, title) {
     updateJjantech(j => ({ ...j, items: (j.items || []).map(it => it.id === id ? { ...it, title } : it) }));
@@ -859,7 +890,6 @@ export default function App() {
 
   const wk = getMonday(selDate);
   const stats = computeWeekStats(todos.weeklyTable, jj, wk, isRestDay);
-  const prevWeekKey = findPrevWeekKey(todos.weeklyTable, wk);
 
   const cloudBadge = (
     <div title={cloudStatus?.text} style={{display:"flex",alignItems:"center",gap:6,background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"5px 10px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:11,flexShrink:0}}>
@@ -878,10 +908,10 @@ export default function App() {
     <>
       {tab==="week"&&(
         <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-          <WeeklyBoard selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} prevWeekKey={prevWeekKey} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} copyWeekFrom={copyWeekFrom} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
+          <WeeklyBoard selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
         </div>
       )}
-      {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
+      {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
       {tab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
       {tab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
     </>
