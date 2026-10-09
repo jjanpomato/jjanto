@@ -238,7 +238,7 @@ function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
 
 // 주간 표: 행 = 매일 하는 항목, 열 = 월~금. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
 // 짠테크는 항목이 많아서 표에는 "짠테크" 한 줄로만 들어가고, 그날 체크리스트를 다 끝내면 완료로 쳐요.
-function WeeklyBoard({ selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, openJjantech, openSummary }) {
+function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, openJjantech, openSummary }) {
   const [editMode, setEditMode] = useState(false);
   const captureRef = useRef(null);
   const wk = getMonday(selDate);
@@ -255,11 +255,13 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, toggleRestDay, addW
     else saveNodeAsImage(captureRef.current, fname);
   }
 
-  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: 76 };
-  const cellTd = d => ({ minWidth: 50, padding: "8px 1px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
+  // PC(넓은 화면)에서는 칸을 넓혀서 체크박스 옆에 글씨가 한 줄로 들어가게 해요
+  const wide = !isMobile;
+  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: wide ? "10px 10px 10px 4px" : "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: wide ? 180 : 76, width: wide ? 150 : undefined };
+  const cellTd = d => ({ minWidth: wide ? 140 : 50, padding: wide ? "10px 6px" : "8px 1px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto" }}>
+    <div style={{ maxWidth: wide ? 1240 : 720, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
         <button onClick={() => setSelDate(addDays(wk, -7))} style={navBtn}>‹</button>
         <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, flex: 1, textAlign: "center" }}>{range}</span>
@@ -305,9 +307,9 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, toggleRestDay, addW
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
                       {editMode ? (
-                        <KoreanInput key={"rowlabel-" + wk + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(wk, row.id, v)} style={{ width: 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
+                        <KoreanInput key={"rowlabel-" + wk + "-" + row.id} value={row.label} onChange={v => updateWeeklyLabel(wk, row.id, v)} style={{ width: wide ? 130 : 60, border: "none", borderBottom: `1px solid ${C.border}`, fontSize: wide ? 14 : 12, fontWeight: 700, color: C.text, outline: "none", background: "transparent", padding: "2px 0", fontFamily: "inherit" }} />
                       ) : (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text, wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.3 }}>{row.label}</span>
+                        <span style={{ fontSize: wide ? 14 : 12, fontWeight: 700, color: C.text, wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.3 }}>{row.label}</span>
                       )}
                     </div>
                   </td>
@@ -316,19 +318,23 @@ function WeeklyBoard({ selDate, setSelDate, todayStr, stats, toggleRestDay, addW
                     const checked = !!(row.checks && row.checks[d.key]);
                     const text = (row.cells && row.cells[d.key]) || "";
                     return (
-                      <td key={d.key} style={{ ...cellTd(d), verticalAlign: "top" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <td key={d.key} style={{ ...cellTd(d), verticalAlign: wide ? "middle" : "top" }}>
+                        <div style={{ display: "flex", flexDirection: wide ? "row" : "column", alignItems: "center", justifyContent: wide && !off ? "flex-start" : "center", gap: wide ? 8 : 4 }}>
                           {editMode ? (
                             <>
-                              <KoreanInput key={"cell-" + wk + "-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(wk, row.id, d.key, v)} placeholder="할 일" style={{ width: 48, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, textAlign: "center", outline: "none", background: off ? "#F5EEEC" : "#FFF8FA", color: C.text, padding: "4px 2px", fontFamily: "inherit" }} />
-                              <button onClick={() => toggleWeeklyOff(wk, row.id, d.key)} style={{ border: "none", borderRadius: 6, padding: "2px 6px", fontSize: 10, fontWeight: 800, cursor: "pointer", background: off ? C.sub : C.pink1, color: off ? C.white : C.sub, fontFamily: "inherit" }}>{off ? "안 함" : "함"}</button>
+                              <KoreanInput key={"cell-" + wk + "-" + row.id + "-" + d.key} value={text} onChange={v => updateWeeklyCell(wk, row.id, d.key, v)} placeholder="할 일" style={{ width: wide ? "100%" : 48, minWidth: 0, flex: wide ? 1 : undefined, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: wide ? 13 : 11, textAlign: wide ? "left" : "center", outline: "none", background: off ? "#F5EEEC" : "#FFF8FA", color: C.text, padding: wide ? "6px 8px" : "4px 2px", fontFamily: "inherit" }} />
+                              <button onClick={() => toggleWeeklyOff(wk, row.id, d.key)} style={{ flexShrink: 0, whiteSpace: "nowrap", border: "none", borderRadius: 6, padding: wide ? "5px 8px" : "2px 6px", fontSize: wide ? 11 : 10, fontWeight: 800, cursor: "pointer", background: off ? C.sub : C.pink1, color: off ? C.white : C.sub, fontFamily: "inherit" }}>{off ? "안 함" : "함"}</button>
                             </>
                           ) : off ? (
                             <span style={{ color: C.pink2, fontWeight: 900, fontSize: 13, lineHeight: "22px" }}>—</span>
                           ) : (
                             <>
                               <WeeklyCheckbox checked={checked} onToggle={() => toggleWeeklyCheck(wk, row.id, d.key)} />
-                              {text && <span style={{ fontSize: 11, lineHeight: 1.3, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 52, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{text}</span>}
+                              {text && (wide ? (
+                                <span title={text} style={{ flex: 1, minWidth: 0, fontSize: 13, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>{text}</span>
+                              ) : (
+                                <span style={{ fontSize: 11, lineHeight: 1.3, color: checked ? C.sub : C.text, textDecoration: checked ? "line-through" : "none", maxWidth: 52, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{text}</span>
+                              ))}
                             </>
                           )}
                         </div>
@@ -455,11 +461,12 @@ function SummaryCardModal({ isMobile, stats, wk, onClose }) {
 }
 
 // 짠테크 매일 체크리스트: 항목은 한 번만 만들어두고, 체크는 날짜별로 따로 저장돼서 매일 새로 시작해요
-function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSources, importFromCat, toggleJjantech, addJjantechItems, renameJjantechItem, removeJjantechItem, moveJjantechItem }) {
+function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSources, importFromCat, clearJjantechItems, toggleJjantech, addJjantechItems, renameJjantechItem, removeJjantechItem, moveJjantechItem }) {
   const [editMode, setEditMode] = useState(false);
   const [hideDone, setHideDone] = useState(false);
   const [bulk, setBulk] = useState("");
   const [bulkKey, setBulkKey] = useState(0);
+  const [confirmClear, setConfirmClear] = useState(false);
   const items = jj.items || [];
   const log = (jj.log && jj.log[selDate]) || {};
   const done = items.filter(it => log[it.id]).length;
@@ -478,7 +485,7 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: isMobile ? 720 : 1240, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
           <button onClick={() => setSelDate(addDays(selDate, -1))} style={navBtn}>‹</button>
           <span style={{ fontSize: 15, fontWeight: 800, color: C.rose, flex: 1, textAlign: "center" }}>{selDate === todayStr ? `오늘 · ${dateLabel}` : dateLabel}</span>
@@ -505,7 +512,7 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
           <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: C.sub, fontWeight: 700 }}>🎉 오늘 짠테크 모두 끝!</div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: isMobile || editMode ? "1fr" : "1fr 1fr", gap: 6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : editMode ? "1fr 1fr" : "repeat(3, 1fr)", gap: 6 }}>
           {visible.map((it, i) => {
             const checked = !!log[it.id];
             return editMode ? (
@@ -543,6 +550,20 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
             <KoreanTextarea key={"bulk-" + bulkKey} value={bulk} onChange={setBulk} rows={4} placeholder={"예)\n출석체크\n만보기 적립\n퀴즈 풀기"} style={{ ...inp, resize: "vertical", lineHeight: 1.6, marginBottom: 8 }} />
             <button onClick={submitBulk} style={{ width: "100%", padding: "9px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>추가하기</button>
           </div>
+        )}
+
+        {editMode && items.length > 0 && (
+          confirmClear ? (
+            <div style={{ marginTop: 12, padding: "12px 14px", background: "#FFF0F0", borderRadius: 12, border: "1.5px solid #FFB3B3" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#E63946", marginBottom: 8 }}>⚠️ 짠테크 항목 {items.length}개를 모두 지울까요? 지운 뒤 '예전 할일에서 불러오기'로 다시 가져올 수 있어요.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.pink1, color: C.sub, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>취소</button>
+                <button onClick={() => { clearJjantechItems(); setConfirmClear(false); }} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: "#E63946", color: "white", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>모두 지우기</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmClear(true)} style={{ marginTop: 12, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid #FFB3B3", background: "#FFF0F0", color: "#E63946", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑️ 짠테크 항목 전체 비우기</button>
+          )
         )}
       </div>
     </div>
@@ -867,6 +888,9 @@ export default function App() {
       return { ...j, items: [...(j.items || []), ...fresh.map(title => ({ id: genId(), title }))] };
     });
   }
+  function clearJjantechItems() {
+    updateJjantech(j => ({ ...j, items: [] }));
+  }
   function renameJjantechItem(id, title) {
     updateJjantech(j => ({ ...j, items: (j.items || []).map(it => it.id === id ? { ...it, title } : it) }));
   }
@@ -908,10 +932,10 @@ export default function App() {
     <>
       {tab==="week"&&(
         <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-          <WeeklyBoard selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
+          <WeeklyBoard isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
         </div>
       )}
-      {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
+      {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} clearJjantechItems={clearJjantechItems} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
       {tab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
       {tab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
     </>
