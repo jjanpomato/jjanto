@@ -108,23 +108,27 @@ function computeWeekStats(table, jj, wk, isRestDay) {
     const jjItems = (jj && jj.items) || [];
     const dayLog = (jj && jj.log && jj.log[d.ds]) || {};
     const jjDone = jjItems.filter(it => dayLog[it.id]).length;
-    let total = 0, done = 0;
-    if (!rest) {
-      rows.forEach(r => {
-        if (r.off && r.off[d.key]) return;
-        total++;
-        if (r.checks && r.checks[d.key]) done++;
-      });
-      if (jjItems.length) { total++; if (jjDone === jjItems.length) done++; }
-    }
-    return { ...d, rest, total, done, pct: total ? Math.round(done / total * 100) : null, jjDone, jjTotal: jjItems.length };
+    // planned: 그날 해야 했던 칸 수. 쉬는 날도 세 두면 영상 카드에서 "다 한 날"로 칠 수 있어요.
+    let planned = 0, done = 0;
+    rows.forEach(r => {
+      if (r.off && r.off[d.key]) return;
+      planned++;
+      if (!rest && r.checks && r.checks[d.key]) done++;
+    });
+    if (jjItems.length) { planned++; if (!rest && jjDone === jjItems.length) done++; }
+    const total = rest ? 0 : planned;
+    if (rest) done = 0;
+    return { ...d, rest, planned, total, done, pct: total ? Math.round(done / total * 100) : null, jjDone, jjTotal: jjItems.length };
   });
   const total = days.reduce((s, d) => s + d.total, 0);
   const done = days.reduce((s, d) => s + d.done, 0);
+  // 영상 카드용: 쉬는 날은 계획했던 칸을 전부 한 걸로 쳐서(100%) 주간 달성률에 넣어요.
+  const restPlanned = days.reduce((s, d) => s + (d.rest ? d.planned : 0), 0);
   const workDays = days.filter(d => !d.rest);
   return {
     rows, days, total, done,
     pct: total ? Math.round(done / total * 100) : null,
+    cardPct: total + restPlanned ? Math.round((done + restPlanned) / (total + restPlanned) * 100) : (days.some(d => d.rest) ? 100 : null),
     jjFullDays: workDays.filter(d => d.jjTotal && d.jjDone === d.jjTotal).length,
     jjActiveDays: workDays.filter(d => d.jjTotal).length,
   };
@@ -415,8 +419,10 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
 function SummaryCardModal({ isMobile, stats, wk, onClose }) {
   const ref = useRef(null);
   const range = weekRangeLabel(wk);
-  const tc = tomatoCount(stats.pct);
-  const msg = stats.pct === null ? "🍅 이번 주도 화이팅!" : stats.pct === 100 ? "🎉 이번 주 올클리어!" : stats.pct >= 70 ? "🌸 이번 주도 잘 해냈다!" : "🍅 다음 주엔 조금 더 힘내보자!";
+  // 영상에서는 쉬는 날을 100% 달성으로 보여줘요 (앱 화면의 달성률은 그대로 쉬는 날을 빼고 계산)
+  const pct = stats.cardPct;
+  const tc = tomatoCount(pct);
+  const msg = pct === null ? "🍅 이번 주도 화이팅!" : pct === 100 ? "🎉 이번 주 올클리어!" : pct >= 70 ? "🌸 이번 주도 잘 해냈다!" : "🍅 다음 주엔 조금 더 힘내보자!";
   return (
     <ModalWrap onClose={onClose} zIndex={300} isMobile={isMobile}>
       <div style={{ fontSize: 15, fontWeight: 800, color: C.rose, marginBottom: 14, textAlign: "center" }}>🎬 영상용 요약 카드</div>
@@ -427,7 +433,7 @@ function SummaryCardModal({ isMobile, stats, wk, onClose }) {
             <div style={{ fontSize: 12, color: C.sub, fontWeight: 700, marginTop: 3 }}>{range} · 월~금</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <Ring pct={stats.pct || 0} size={78} stroke={8} />
+            <Ring pct={pct || 0} size={78} stroke={8} />
             <div style={{ fontSize: 10, color: C.sub, fontWeight: 800, marginTop: 4 }}>주간 달성률</div>
           </div>
         </div>
@@ -435,14 +441,10 @@ function SummaryCardModal({ isMobile, stats, wk, onClose }) {
         {stats.days.map(d => (
           <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
             <span style={{ width: 18, fontSize: 14, fontWeight: 900, color: C.text }}>{d.label}</span>
-            {d.rest ? (
-              <span style={{ flex: 1, fontSize: 12, color: C.sub, fontWeight: 700 }}>🌿 쉬는 날</span>
-            ) : (
-              <div style={{ flex: 1, height: 14, borderRadius: 99, background: "rgba(255,255,255,.85)", overflow: "hidden" }}>
-                <div style={{ width: `${d.pct || 0}%`, height: "100%", borderRadius: 99, background: d.pct === 100 ? C.green : `linear-gradient(90deg,${C.pink3},${C.rose})` }} />
-              </div>
-            )}
-            <span style={{ width: 42, textAlign: "right", fontSize: 14, fontWeight: 900, color: d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "" : d.pct === null ? "—" : d.pct + "%"}</span>
+            <div style={{ flex: 1, height: 14, borderRadius: 99, background: "rgba(255,255,255,.85)", overflow: "hidden" }}>
+              <div style={{ width: `${d.rest ? 100 : d.pct || 0}%`, height: "100%", borderRadius: 99, background: d.rest || d.pct === 100 ? C.green : `linear-gradient(90deg,${C.pink3},${C.rose})` }} />
+            </div>
+            <span style={{ width: 42, textAlign: "right", fontSize: 14, fontWeight: 900, color: d.rest || d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "100%" : d.pct === null ? "—" : d.pct + "%"}</span>
           </div>
         ))}
         {stats.jjActiveDays > 0 && (
