@@ -934,6 +934,30 @@ function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : []; }
 const smallInp = { width: "100%", minWidth: 0, boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: "none", background: "#FFF8FA", color: C.text, padding: "6px 8px", fontFamily: "inherit" };
 const dashedAddBtn = { width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" };
 const tipBox = { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" };
+// 단계·분류 이름도 직접 추가·수정·삭제할 수 있어요. 한 번도 안 고쳤으면 기본 목록을 써요.
+function sectionsOf(wedding, field, defaults) {
+  const list = asList(wedding[field]);
+  return list.length ? list : defaults;
+}
+function moveInList(list, i, dir) {
+  const k = i + dir;
+  if (i < 0 || k < 0 || k >= list.length) return list;
+  const next = [...list];
+  [next[i], next[k]] = [next[k], next[i]];
+  return next;
+}
+const iconBtn = { background: "none", border: "none", cursor: "pointer", color: C.sub, fontSize: 13, padding: "2px 4px", flexShrink: 0 };
+// 편집 모드에서 단계·분류 제목 줄: 이름 고치기 · 위아래 옮기기 · 지우기
+function SectionEditHead({ id, label, onRename, onMove, onRemove, first, last }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
+      <KoreanInput key={"sec-" + id} value={label} onChange={onRename} style={{ ...smallInp, flex: 1, fontWeight: 800, background: C.white }} />
+      <button onClick={() => onMove(-1)} disabled={first} style={{ ...iconBtn, opacity: first ? .25 : .8 }}>↑</button>
+      <button onClick={() => onMove(1)} disabled={last} style={{ ...iconBtn, opacity: last ? .25 : .8 }}>↓</button>
+      <button onClick={onRemove} title="이 묶음 지우기" style={{ ...iconBtn, color: C.tomato }}>🗑️</button>
+    </div>
+  );
+}
 function editBtn(on) { return { padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: on ? C.green : C.rose, flexShrink: 0 }; }
 
 // ✅ 준비할 것: 중요한 순서대로 15단계로 묶은 체크리스트. 처음엔 비어 있고, 기본 목록을 불러온 뒤 고쳐 쓰면 돼요.
@@ -954,7 +978,8 @@ const TASK_STAGES = [
   { key: "s14", label: "14 결혼식 직전 점검", items: ["모든 업체 일정과 시간 재확인", "예식장 최종 점검 (식순, 음악, 좌석, 식사)", "잔금 정리 및 사례비 준비 (헬퍼, 기사님 등)", "축의금 접수 담당자 지정", "사회자·축가자와 최종 점검", "당일 비상 키트 준비 (반창고, 핀, 손거울, 간식, 보조배터리)", "전날 충분히 쉬기"] },
   { key: "s15", label: "15 결혼식 후", items: ["축의금 정산", "하객과 도움 주신 분들께 감사 인사", "앨범·영상 수령 확인", "양가 부모님께 인사 및 선물", "혼인신고 마무리 (아직 안 했다면)"] },
 ];
-const TASK_ETC = { key: "etc", label: "기타" };
+const TASK_DEFAULT_SECTIONS = TASK_STAGES.map(({ key, label }) => ({ key, label }));
+const ORPHAN = { key: "_none", label: "분류 없음" };
 function TaskView({ isMobile, wedding, setWedding }) {
   const [editMode, setEditMode] = useState(false);
   const [hideDone, setHideDone] = useState(false);
@@ -963,11 +988,44 @@ function TaskView({ isMobile, wedding, setWedding }) {
   const pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
   const upd = fn => setWedding(p => ({ ...p, tasks: fn(asList(p.tasks)) }));
   const setTask = (id, patch) => upd(list => list.map(t => t.id === id ? { ...t, ...patch } : t));
-  const known = new Set(TASK_STAGES.map(s => s.key));
-  const stageOf = t => known.has(t.stage) ? t.stage : TASK_ETC.key;
+  const stages = sectionsOf(wedding, "taskStages", TASK_DEFAULT_SECTIONS);
+  const known = new Set(stages.map(s => s.key));
+  const stageOf = t => known.has(t.stage) ? t.stage : ORPHAN.key;
+  const hasOrphan = tasks.some(t => !known.has(t.stage));
+  const updStages = fn => setWedding(p => ({ ...p, taskStages: fn(sectionsOf(p, "taskStages", TASK_DEFAULT_SECTIONS)) }));
 
+  // 기본 목록을 불러올 때, 지워버린 기본 단계가 있으면 다시 만들어줘요
   function loadTemplate() {
-    upd(list => [...list, ...TASK_STAGES.flatMap(s => s.items.map(title => ({ id: genId(), stage: s.key, title, done: false, due: "" })))]);
+    setWedding(p => {
+      const cur = sectionsOf(p, "taskStages", TASK_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(s => s.key));
+      return {
+        ...p,
+        taskStages: [...cur, ...TASK_DEFAULT_SECTIONS.filter(s => !have.has(s.key))],
+        tasks: [...asList(p.tasks), ...TASK_STAGES.flatMap(s => s.items.map(title => ({ id: genId(), stage: s.key, title, done: false, due: "" })))],
+      };
+    });
+  }
+  function addStage() {
+    const key = "st_" + genId();
+    updStages(list => [...list, { key, label: "새 단계" }]);
+    upd(list => [...list, { id: genId(), stage: key, title: "새 할 일", done: false, due: "" }]);
+  }
+  function removeStage(s) {
+    const n = tasks.filter(t => t.stage === s.key).length;
+    if (stages.length <= 1) { window.alert("단계는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${s.label}' 단계를 지울까요?${n ? ` 안에 있는 할 일 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updStages(list => list.filter(x => x.key !== s.key));
+    upd(list => list.filter(t => t.stage !== s.key));
+  }
+  // 같은 단계 안에서 위아래로 옮겨요
+  function moveTask(t, dir) {
+    upd(list => {
+      const same = list.filter(x => stageOf(x) === stageOf(t));
+      const j = same.findIndex(x => x.id === t.id) + dir;
+      if (j < 0 || j >= same.length) return list;
+      return moveInList(list, list.findIndex(x => x.id === t.id), list.findIndex(x => x.id === same[j].id) - list.findIndex(x => x.id === t.id));
+    });
   }
 
   return (
@@ -982,32 +1040,46 @@ function TaskView({ isMobile, wedding, setWedding }) {
         <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "편집"}</button>
       </div>
 
-      {tasks.length === 0 && (
+      {tasks.length === 0 && !editMode && (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>중요한 순서대로 정리된 15단계 준비 목록을 불러와서 우리한테 맞게 고쳐 써봐요 💍</div>
           <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 준비 목록 불러오기</button>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <b>편집</b>을 눌러요</div>
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-        {[...TASK_STAGES, TASK_ETC].map(s => {
+        {[...stages, ...(hasOrphan ? [ORPHAN] : [])].map((s, si) => {
           const items = tasks.filter(t => stageOf(t) === s.key);
-          if (items.length === 0 && (!editMode || s.key === TASK_ETC.key && tasks.length === 0)) return null;
+          if (items.length === 0 && !editMode) return null;
           const shown = hideDone && !editMode ? items.filter(t => !t.done) : items;
           const sDone = items.filter(t => t.done).length;
           const allDone = items.length > 0 && sDone === items.length;
           return (
             <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${allDone ? "#9ED4B4" : C.border}`, overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px", background: allDone ? "#E9F6EE" : "#FFF3F1", borderBottom: `1px solid ${C.border}` }}>
-                <span style={{ flex: 1, fontSize: 14, fontWeight: 900, color: allDone ? "#2E8B57" : C.rose }}>{s.label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: allDone ? "#E9F6EE" : "#FFF3F1", borderBottom: `1px solid ${C.border}` }}>
+                {editMode && s.key !== ORPHAN.key ? (
+                  <SectionEditHead id={s.key} label={s.label} first={si === 0} last={si === stages.length - 1}
+                    onRename={v => updStages(list => list.map(x => x.key === s.key ? { ...x, label: v } : x))}
+                    onMove={dir => updStages(list => moveInList(list, si, dir))}
+                    onRemove={() => removeStage(s)} />
+                ) : (
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 900, color: allDone ? "#2E8B57" : C.rose }}>{s.label}</span>
+                )}
                 <span style={{ fontSize: 11, fontWeight: 800, color: allDone ? "#4CAF84" : C.sub }}>{allDone ? "✓ " : ""}{sDone}/{items.length}</span>
               </div>
               <div style={{ padding: "6px 10px" }}>
-                {shown.map(t => editMode ? (
-                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
-                    <KoreanInput key={"task-" + t.id} value={t.title} onChange={v => setTask(t.id, { title: v })} style={{ ...smallInp, flex: 1 }} />
+                {shown.map((t, ti) => editMode ? (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                    <KoreanInput key={"task-" + t.id} value={t.title} onChange={v => setTask(t.id, { title: v })} style={{ ...smallInp, flex: 1, minWidth: isMobile ? "100%" : 0 }} />
                     <input type="date" value={t.due || ""} onChange={e => setTask(t.id, { due: e.target.value })} title="언제까지" style={{ ...smallInp, width: 130, flex: "none" }} />
-                    <button onClick={() => upd(list => list.filter(x => x.id !== t.id))} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                    <select value={stageOf(t)} onChange={e => setTask(t.id, { stage: e.target.value })} title="다른 단계로 옮기기" style={{ ...smallInp, width: isMobile ? 90 : 110, flex: "none" }}>
+                      {stages.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+                      {stageOf(t) === ORPHAN.key && <option value={ORPHAN.key}>{ORPHAN.label}</option>}
+                    </select>
+                    <button onClick={() => moveTask(t, -1)} disabled={ti === 0} style={{ ...iconBtn, opacity: ti === 0 ? .25 : .8 }}>↑</button>
+                    <button onClick={() => moveTask(t, 1)} disabled={ti === shown.length - 1} style={{ ...iconBtn, opacity: ti === shown.length - 1 ? .25 : .8 }}>↓</button>
+                    <button onClick={() => upd(list => list.filter(x => x.id !== t.id))} style={{ ...iconBtn, color: C.tomato }}>✕</button>
                   </div>
                 ) : (
                   <div key={t.id} onClick={() => setTask(t.id, { done: !t.done })} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 2px", borderBottom: `1px dashed ${C.pink1}`, cursor: "pointer", userSelect: "none" }}>
@@ -1017,15 +1089,17 @@ function TaskView({ isMobile, wedding, setWedding }) {
                   </div>
                 ))}
                 {!editMode && hideDone && items.length > 0 && shown.length === 0 && <div style={{ fontSize: 12, color: "#4CAF84", fontWeight: 700, padding: "8px 2px" }}>🎉 이 단계 준비 끝!</div>}
-                {editMode && <button onClick={() => upd(list => [...list, { id: genId(), stage: s.key, title: "새 할 일", done: false, due: "" }])} style={{ ...dashedAddBtn, marginTop: 6, padding: "6px 0" }}>＋ 추가</button>}
+                {editMode && s.key !== ORPHAN.key && <button onClick={() => upd(list => [...list, { id: genId(), stage: s.key, title: "새 할 일", done: false, due: "" }])} style={{ ...dashedAddBtn, marginTop: 6, padding: "6px 0" }}>＋ 할 일 추가</button>}
               </div>
             </div>
           );
         })}
       </div>
+      {editMode && <button onClick={addStage} style={{ ...dashedAddBtn, marginTop: 12 }}>＋ 새 단계 추가</button>}
       {editMode && (
         <div style={tipBox}>
-          ✏️ 할 일 이름을 바로 고칠 수 있고, 날짜를 넣으면 "~11/30"처럼 마감일이 보여요. 지난 마감일은 빨갛게 보여요.<br />
+          ✏️ 단계 이름과 할 일을 바로 고칠 수 있어요. ↑↓로 순서를 바꾸고, 할 일 옆 목록으로 다른 단계로 옮겨요.<br />
+          📅 날짜를 넣으면 "~11/30"처럼 마감일이 보여요. 지난 마감일은 빨갛게 보여요.<br />
           🧹 스몰웨딩·종교 예식처럼 우리랑 상관없는 항목은 ✕로 지워서 쓰세요.<br />
           {tasks.length > 0 && <>📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 목록 한 번 더 불러오기</span> (지금 목록 뒤에 덧붙여져요)</>}
         </div>
@@ -1062,6 +1136,8 @@ const BUDGET_COLS = [
   { key: "paid",   label: "낸 돈",  w: 100, num: true },
   { key: "memo",   label: "메모",   w: 140 },
 ];
+const BUDGET_DEFAULT_SECTIONS = BUDGET_GROUPS.map(({ key, label, color }) => ({ key, label, color }));
+const SECTION_COLORS = ["#F4B6C2", "#FFD27F", "#FFE7A3", "#B9E3C6", "#D9C8F0", "#B7D7F2", "#E3DAD7", "#FFC8A8"];
 // 호갱 vs 실속: 릴스에서 본 결혼비용 차이 포인트
 const BUDGET_TIPS = [
   ["풀패키지 (스드메+웨딩홀 2000만원)", "필요한 것만 선택계약"],
@@ -1073,11 +1149,56 @@ const BUDGET_TIPS = [
 ];
 function BudgetView({ isMobile, wedding, setWedding }) {
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const budget = wedding.budget || {};
   const items = asList(budget.items);
-  const groupKeys = new Set(BUDGET_GROUPS.map(g => g.key));
-  const groupOf = it => groupKeys.has(it.group) ? it.group : "etc";
+  const groups = sectionsOf(wedding, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
+  const groupKeys = new Set(groups.map(g => g.key));
+  const groupOf = it => groupKeys.has(it.group) ? it.group : ORPHAN.key;
+  const shownGroups = [...groups, ...(items.some(it => !groupKeys.has(it.group)) ? [{ ...ORPHAN, color: "#E3DAD7" }] : [])];
   const upd = fn => setWedding(p => ({ ...p, budget: fn({ ...(p.budget || {}), items: asList(p.budget && p.budget.items) }) }));
+  const updGroups = fn => setWedding(p => ({ ...p, budgetGroups: fn(sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS)) }));
+  function loadTemplate() {
+    setWedding(p => {
+      const cur = sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(g => g.key));
+      const b = p.budget || {};
+      return { ...p, budgetGroups: [...cur, ...BUDGET_DEFAULT_SECTIONS.filter(g => !have.has(g.key))], budget: { ...b, items: [...asList(b.items), ...BUDGET_GROUPS.flatMap(g => g.items.map(name => newItem(g.key, name)))] } };
+    });
+  }
+  function addGroup() {
+    const key = "bg_" + genId();
+    updGroups(list => [...list, { key, label: "새 분류", color: SECTION_COLORS[list.length % SECTION_COLORS.length] }]);
+    upd(b => ({ ...b, items: [...b.items, newItem(key)] }));
+  }
+  function removeGroup(g) {
+    const n = items.filter(it => it.group === g.key).length;
+    if (groups.length <= 1) { window.alert("분류는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${g.label}' 분류를 지울까요?${n ? ` 안에 있는 항목 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updGroups(list => list.filter(x => x.key !== g.key));
+    upd(b => ({ ...b, items: b.items.filter(it => it.group !== g.key) }));
+  }
+  // 같은 분류 안에서 위아래로 옮겨요
+  function moveItem(it, dir) {
+    upd(b => {
+      const same = b.items.filter(x => groupOf(x) === groupOf(it));
+      const j = same.findIndex(x => x.id === it.id) + dir;
+      if (j < 0 || j >= same.length) return b;
+      const i = b.items.findIndex(x => x.id === it.id);
+      return { ...b, items: moveInList(b.items, i, b.items.findIndex(x => x.id === same[j].id) - i) };
+    });
+  }
+  // 편집 모드에서 항목 옆에 나오는 분류 옮기기·순서 버튼
+  const itemTools = (it, idx, len) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+      <select value={groupOf(it)} onChange={e => setItem(it.id, "group", e.target.value)} title="다른 분류로 옮기기" style={{ ...smallInp, width: 88, padding: "4px 4px" }}>
+        {groups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+        {groupOf(it) === ORPHAN.key && <option value={ORPHAN.key}>{ORPHAN.label}</option>}
+      </select>
+      <button onClick={() => moveItem(it, -1)} disabled={idx === 0} style={{ ...iconBtn, opacity: idx === 0 ? .25 : .8 }}>↑</button>
+      <button onClick={() => moveItem(it, 1)} disabled={idx === len - 1} style={{ ...iconBtn, opacity: idx === len - 1 ? .25 : .8 }}>↓</button>
+    </span>
+  );
   const setItem = (id, key, v) => upd(b => ({ ...b, items: b.items.map(it => it.id === id ? { ...it, [key]: v } : it) }));
   const newItem = (group, item = "") => ({ id: genId(), group, item, detail: "", plan: "", cost: "", groom: "", bride: "", paid: "", memo: "" });
   function removeItem(it) {
@@ -1137,27 +1258,42 @@ function BudgetView({ isMobile, wedding, setWedding }) {
         )}
       </div>
 
-      {items.length === 0 && (
+      {items.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "분류 편집"}</button>
+        </div>
+      )}
+      {items.length === 0 && !editMode && (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>상견례부터 신혼여행까지 자주 쓰는 항목을 불러와서 금액만 채워봐요 💰</div>
-          <button onClick={() => upd(b => ({ ...b, items: BUDGET_GROUPS.flatMap(g => g.items.map(name => newItem(g.key, name))) }))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 항목 불러오기</button>
+          <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 항목 불러오기</button>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <span onClick={() => setEditMode(true)} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>분류 편집</span>을 눌러요</div>
         </div>
       )}
 
-      {items.length > 0 && BUDGET_GROUPS.map(g => {
+      {(items.length > 0 || editMode) && shownGroups.map((g, gi) => {
         const list = items.filter(it => groupOf(it) === g.key);
+        if (!editMode && list.length === 0) return null;
         const gCost = sum(list, "cost"), gGroom = sum(list, "groom"), gBride = sum(list, "bride");
         return (
           <div key={g.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, marginBottom: 12, overflow: "hidden" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: g.color + "66", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 14, fontWeight: 900, color: C.text, flex: 1 }}>{g.label}</span>
+              {editMode && g.key !== ORPHAN.key ? (
+                <SectionEditHead id={g.key} label={g.label} first={gi === 0} last={gi === groups.length - 1}
+                  onRename={v => updGroups(l => l.map(x => x.key === g.key ? { ...x, label: v } : x))}
+                  onMove={dir => updGroups(l => moveInList(l, gi, dir))}
+                  onRemove={() => removeGroup(g)} />
+              ) : (
+                <span style={{ fontSize: 14, fontWeight: 900, color: C.text, flex: 1 }}>{g.label}</span>
+              )}
               <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>총 {fmtWon(gCost)}원</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>💙 {fmtWon(gGroom)} · 🩷 {fmtWon(gBride)}</span>
             </div>
             {isMobile ? (
               <div style={{ padding: "6px 10px" }}>
-                {list.map(it => (
+                {list.map((it, ii) => (
                   <div key={it.id} style={{ borderBottom: `1px dashed ${C.border}`, padding: "8px 0" }}>
+                    {editMode && <div style={{ marginBottom: 6 }}>{itemTools(it, ii, list.length)}</div>}
                     <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                       {field(it, BUDGET_COLS[0], { fontWeight: 800, width: 110, flex: "none" })}
                       {field(it, BUDGET_COLS[1], { flex: 1 })}
@@ -1177,7 +1313,7 @@ function BudgetView({ isMobile, wedding, setWedding }) {
                     {gapNote(it)}
                   </div>
                 ))}
-                <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, margin: "8px 0 4px", padding: "6px 0" }}>＋ {g.label} 항목 추가</button>
+                {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, margin: "8px 0 4px", padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
@@ -1191,13 +1327,13 @@ function BudgetView({ isMobile, wedding, setWedding }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map(it => (
+                    {list.map((it, ii) => (
                       <Fragment key={it.id}>
                         <tr>
                           {BUDGET_COLS.slice(0, 7).map(c => <td key={c.key} style={{ padding: "4px 3px" }}>{field(it, c, c.key === "item" ? { fontWeight: 800 } : undefined)}</td>)}
                           <td style={{ ...numTd, fontWeight: 800, color: rest(it) ? C.tomato : C.sub }}>{fmtWon(rest(it))}원</td>
                           <td style={{ padding: "4px 3px" }}>{field(it, BUDGET_COLS[7])}</td>
-                          <td style={{ textAlign: "center" }}><button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
+                          <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>{editMode && itemTools(it, ii, list.length)}<button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
                         </tr>
                         {splitGap(it) !== 0 && <tr><td /><td colSpan={9} style={{ padding: "0 4px 4px" }}>{gapNote(it)}</td></tr>}
                       </Fragment>
@@ -1205,7 +1341,7 @@ function BudgetView({ isMobile, wedding, setWedding }) {
                   </tbody>
                 </table>
                 <div style={{ padding: "6px 10px 10px" }}>
-                  <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, padding: "6px 0" }}>＋ {g.label} 항목 추가</button>
+                  {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
                 </div>
               </div>
             )}
@@ -1213,6 +1349,16 @@ function BudgetView({ isMobile, wedding, setWedding }) {
         );
       })}
 
+      {editMode && (
+        <>
+          <button onClick={addGroup} style={{ ...dashedAddBtn, marginBottom: 12 }}>＋ 새 분류 추가</button>
+          <div style={{ ...tipBox, marginTop: 0, marginBottom: 12 }}>
+            ✏️ 분류 이름을 고치고 ↑↓로 순서를 바꿀 수 있어요. 🗑️를 누르면 그 분류와 안의 항목이 같이 지워져요.<br />
+            🔀 항목 옆 목록으로 다른 분류로 옮기고, ↑↓로 순서를 바꿔요.
+            {items.length > 0 && <><br />📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 항목 한 번 더 불러오기</span> (지금 항목 뒤에 덧붙여져요)</>}
+          </div>
+        </>
+      )}
       {items.length > 0 && (
         <div style={{ background: "#3A3A3A", color: C.white, borderRadius: 14, padding: "12px 16px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 6, fontSize: 14, fontWeight: 800 }}>
           <span>💙 신랑 총결혼비용 {fmtWon(groom)}원</span>
@@ -1237,6 +1383,7 @@ const VENDOR_GROUPS = [
   { key: "main", label: "본식" },
   { key: "etc",  label: "기타" },
 ];
+const VENDOR_DEFAULT_SECTIONS = VENDOR_GROUPS.slice(1);
 const VENDOR_TEMPLATE = [
   ["hall", "🏰", "웨딩홀"],
   ["sdm", "📸", "스튜디오"], ["sdm", "👰", "드레스"], ["sdm", "🤵", "예복"], ["sdm", "💄", "메이크업"], ["sdm", "💇", "헤어 변형"],
@@ -1260,8 +1407,43 @@ function VendorView({ isMobile, wedding, setWedding }) {
   const statusOf = v => VENDOR_STATUS.find(s => s.key === (v.status || "")) || VENDOR_STATUS[0];
   const nextStatus = v => VENDOR_STATUS[(VENDOR_STATUS.indexOf(statusOf(v)) + 1) % VENDOR_STATUS.length].key;
   const count = k => vendors.filter(v => (v.status || "") === k).length;
-  // 안 함은 맨 아래로 내려서 볼 것만 위에 남겨요
-  const shown = vendors.filter(v => group === "all" || v.group === group).sort((a, b) => (a.status === "skip") - (b.status === "skip"));
+  const groups = sectionsOf(wedding, "vendorGroups", VENDOR_DEFAULT_SECTIONS);
+  const groupKeys = new Set(groups.map(g => g.key));
+  const updGroups = fn => setWedding(p => ({ ...p, vendorGroups: fn(sectionsOf(p, "vendorGroups", VENDOR_DEFAULT_SECTIONS)) }));
+  const curGroup = group === "all" || groupKeys.has(group) ? group : "all";
+  // 안 함은 맨 아래로 내려서 볼 것만 위에 남겨요 (편집할 때는 저장된 순서 그대로)
+  const filtered = vendors.filter(v => curGroup === "all" || v.group === curGroup);
+  const shown = editMode ? filtered : [...filtered].sort((a, b) => (a.status === "skip") - (b.status === "skip"));
+
+  function loadTemplate() {
+    setWedding(p => {
+      const cur = sectionsOf(p, "vendorGroups", VENDOR_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(g => g.key));
+      return {
+        ...p,
+        vendorGroups: [...cur, ...VENDOR_DEFAULT_SECTIONS.filter(g => !have.has(g.key))],
+        vendors: [...asList(p.vendors), ...VENDOR_TEMPLATE.map(([g, emoji, name]) => ({ id: genId(), group: g, emoji, name, status: "", vendor: "", memo: "" }))],
+      };
+    });
+  }
+  function addGroup() {
+    const key = "vg_" + genId();
+    updGroups(list => [...list, { key, label: "새 분류" }]);
+    setGroup(key);
+  }
+  function removeGroup(g) {
+    const n = vendors.filter(v => v.group === g.key).length;
+    if (groups.length <= 1) { window.alert("분류는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${g.label}' 분류를 지울까요?${n ? ` 안에 있는 업체 항목 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updGroups(list => list.filter(x => x.key !== g.key));
+    upd(list => list.filter(v => v.group !== g.key));
+  }
+  // 지금 보이는 목록 안에서 위아래로 옮겨요
+  function moveVendor(v, dir) {
+    const j = shown.findIndex(x => x.id === v.id) + dir;
+    if (j < 0 || j >= shown.length) return;
+    upd(list => { const i = list.findIndex(x => x.id === v.id); return moveInList(list, i, list.findIndex(x => x.id === shown[j].id) - i); });
+  }
 
   const stat = (label, n, color) => (
     <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
@@ -1270,10 +1452,11 @@ function VendorView({ isMobile, wedding, setWedding }) {
     </div>
   );
 
-  if (vendors.length === 0) return (
+  if (vendors.length === 0 && !editMode) return (
     <div style={{ textAlign: "center", padding: "30px 0" }}>
       <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>웨딩홀부터 부케까지 업체를 하나씩 정해 나가는 걸 한눈에 봐요 🏢</div>
-      <button onClick={() => upd(() => VENDOR_TEMPLATE.map(([g, emoji, name]) => ({ id: genId(), group: g, emoji, name, status: "", vendor: "", memo: "" })))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 업체 목록 불러오기</button>
+      <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 업체 목록 불러오기</button>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <span onClick={() => setEditMode(true)} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>편집</span>을 눌러요</div>
     </div>
   );
 
@@ -1287,12 +1470,27 @@ function VendorView({ isMobile, wedding, setWedding }) {
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
         <div style={{ display: "flex", gap: 4, overflowX: "auto", flex: 1 }}>
-          {VENDOR_GROUPS.map(g => (
-            <button key={g.key} onClick={() => setGroup(g.key)} style={{ flexShrink: 0, padding: "5px 12px", border: "none", borderBottom: `3px solid ${group === g.key ? C.rose : "transparent"}`, background: "transparent", color: group === g.key ? C.text : C.sub, fontSize: 13, fontWeight: group === g.key ? 900 : 700, cursor: "pointer" }}>{g.label}</button>
+          {[VENDOR_GROUPS[0], ...groups].map(g => (
+            <button key={g.key} onClick={() => setGroup(g.key)} style={{ flexShrink: 0, padding: "5px 12px", border: "none", borderBottom: `3px solid ${curGroup === g.key ? C.rose : "transparent"}`, background: "transparent", color: curGroup === g.key ? C.text : C.sub, fontSize: 13, fontWeight: curGroup === g.key ? 900 : 700, cursor: "pointer" }}>{g.label}</button>
           ))}
         </div>
         <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "편집"}</button>
       </div>
+
+      {editMode && (
+        <div style={{ background: C.white, borderRadius: 14, border: `1.5px dashed ${C.rose}`, padding: "10px 12px", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: C.rose, marginBottom: 6 }}>📂 분류 편집</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 6 }}>
+            {groups.map((g, gi) => (
+              <SectionEditHead key={g.key} id={g.key} label={g.label} first={gi === 0} last={gi === groups.length - 1}
+                onRename={v => updGroups(l => l.map(x => x.key === g.key ? { ...x, label: v } : x))}
+                onMove={dir => updGroups(l => moveInList(l, gi, dir))}
+                onRemove={() => removeGroup(g)} />
+            ))}
+          </div>
+          <button onClick={addGroup} style={{ ...dashedAddBtn, marginTop: 8, padding: "6px 0" }}>＋ 새 분류 추가</button>
+        </div>
+      )}
 
       <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, overflow: "hidden" }}>
         {shown.map(v => {
@@ -1305,9 +1503,12 @@ function VendorView({ isMobile, wedding, setWedding }) {
                   <>
                     <KoreanInput key={"vemoji-" + v.id} value={v.emoji || ""} onChange={x => setV(v.id, { emoji: x })} style={{ ...smallInp, width: 44, flex: "none", textAlign: "center" }} />
                     <KoreanInput key={"vname-" + v.id} value={v.name || ""} onChange={x => setV(v.id, { name: x })} style={{ ...smallInp, flex: 1 }} />
-                    <select value={v.group} onChange={e => setV(v.id, { group: e.target.value })} style={{ ...smallInp, width: 90, flex: "none" }}>
-                      {VENDOR_GROUPS.slice(1).map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+                    <select value={groupKeys.has(v.group) ? v.group : ""} onChange={e => setV(v.id, { group: e.target.value })} style={{ ...smallInp, width: 90, flex: "none" }}>
+                      {!groupKeys.has(v.group) && <option value="">분류 없음</option>}
+                      {groups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
                     </select>
+                    <button onClick={() => moveVendor(v, -1)} style={iconBtn}>↑</button>
+                    <button onClick={() => moveVendor(v, 1)} style={iconBtn}>↓</button>
                     <button onClick={() => { if (window.confirm(`${v.name || "이"} 항목을 지울까요?`)) upd(list => list.filter(x => x.id !== v.id)); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
                   </>
                 ) : (
@@ -1333,7 +1534,7 @@ function VendorView({ isMobile, wedding, setWedding }) {
         })}
         {shown.length === 0 && <div style={{ textAlign: "center", padding: "20px 0", fontSize: 13, color: C.sub }}>이 분류엔 아직 항목이 없어요</div>}
       </div>
-      {editMode && <button onClick={() => upd(list => [...list, { id: genId(), group: group === "all" ? "etc" : group, emoji: "📌", name: "새 항목", status: "", vendor: "", memo: "" }])} style={{ ...dashedAddBtn, marginTop: 10 }}>＋ 업체 항목 추가</button>}
+      {editMode && <button onClick={() => upd(list => [...list, { id: genId(), group: curGroup === "all" ? groups[groups.length - 1].key : curGroup, emoji: "📌", name: "새 항목", status: "", vendor: "", memo: "" }])} style={{ ...dashedAddBtn, marginTop: 10 }}>＋ 업체 항목 추가</button>}
       <div style={tipBox}>
         💡 오른쪽 상태 버튼을 누를 때마다 미정 → 후보 → 계약완료 → 안 함 순서로 바뀌어요. 안 함은 맨 아래로 내려가요.<br />
         📝 항목 이름을 누르면 업체 이름과 후보 비교 메모를 적을 수 있어요. 계약 금액은 💰 예산 탭에 적어요.
@@ -1502,7 +1703,10 @@ export default function App() {
 
   const setTodosS   =v=>{ const n=typeof v==="function"?v(todos):v;    setTodos(n);    save("jjanto_todos",n);     triggerAutoSave(); };
   const setMemosS   =v=>{ const n=typeof v==="function"?v(memos):v;    setMemos(n);    save("jjanto_memos",n);     triggerAutoSave(); };
-  const setWeddingS =v=>{ const n=typeof v==="function"?v(wedding):v;  setWedding(n);  save("jjanto_wedding",n);   triggerAutoSave(); };
+  // 한 번 누를 때 여러 번 고쳐도(예: 단계 추가 + 할 일 추가) 앞의 변경이 사라지지 않게 최신 값을 이어서 써요
+  const weddingRef = useRef(wedding);
+  weddingRef.current = wedding;
+  const setWeddingS =v=>{ const n=typeof v==="function"?v(weddingRef.current):v; weddingRef.current=n; stateRef.current={...stateRef.current, wedding:n}; setWedding(n); save("jjanto_wedding",n); triggerAutoSave(); };
   const setRestDaysS=v=>{ const n=typeof v==="function"?v(restDays):v; setRestDays(n); save("jjanto_rest_days",n); triggerAutoSave(); };
   const isRestDay = ds => restDays.includes(ds);
   function toggleRestDay(ds) { setRestDaysS(p => p.includes(ds) ? p.filter(d=>d!==ds) : [...p, ds]); }
