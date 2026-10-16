@@ -756,7 +756,7 @@ function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, 
 }
 
 // 💍 결혼준비 › 하객 관리: 신랑측·신부측 하객을 한 줄씩 적고, 위 요약표는 자동으로 계산돼요.
-// 하객 한 명 = { id, name, type:"모청"|"종이"|"", meetDate, place, perPrice, attend:"O"|"X"|"", meal:"O"|"X"|"", gift, memo }
+// 하객 한 명 = { id, name, type:"모청"|"종이"|"", meetingId(청모), attend:"O"|"X"|"", meal:"O"|"X"|"", gift, memo }
 const EMPTY_WEDDING = { guests: { groom: [], bride: [] } };
 const GUEST_SIDES = [
   { key: "groom", label: "신랑측", emoji: "💙", color: "#5B9BD5", bg: "#EEF5FC" },
@@ -765,9 +765,7 @@ const GUEST_SIDES = [
 const GUEST_COLS = [
   { key: "name",     label: "이름",            w: 110 },
   { key: "type",     label: "유형",            w: 64,  cycle: ["", "모청", "종이"] },
-  { key: "meetDate", label: "청첩장모임 날짜", w: 138 },
-  { key: "place",    label: "🍽️ 식당",         w: 130 },
-  { key: "perPrice", label: "💰 1인금액",      w: 96,  num: true },
+  { key: "meetingId", label: "🍽️ 청모",       w: 180, meeting: true },
   { key: "attend",   label: "참석",            w: 52,  cycle: ["", "O", "X"] },
   { key: "meal",     label: "식사",            w: 52,  cycle: ["", "O", "X"] },
   { key: "gift",     label: "축의금",          w: 100, num: true },
@@ -782,7 +780,7 @@ function guestStats(list) {
   return {
     total, yes, rest: total - yes,
     pct: total ? Math.round(yes / total * 100) : 0,
-    meet: rows.filter(g => g.meetDate).length,
+    meet: rows.filter(g => g.meetingId).length,
     gift: rows.reduce((s, g) => s + toWon(g.gift), 0),
   };
 }
@@ -796,19 +794,37 @@ function CycleChip({ value, onClick }) {
   return <button onClick={onClick} style={{ ...style, minWidth: 40, padding: "4px 8px", borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{value || "—"}</button>;
 }
 
-function GuestField({ g, col, side, updateGuest, style }) {
+function GuestField({ g, col, side, updateGuest, style, meetings, addMeetingFor }) {
   if (col.cycle) return <CycleChip value={g[col.key]} onClick={() => updateGuest(side, g.id, col.key, nextInCycle(col.cycle, g[col.key]))} />;
   const base = { width: "100%", minWidth: 0, boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: "none", background: "#FFF8FA", color: C.text, padding: "6px 8px", fontFamily: "inherit", ...style };
-  if (col.key === "meetDate") return <input type="date" value={g.meetDate || ""} onChange={e => updateGuest(side, g.id, "meetDate", e.target.value)} style={base} />;
+  if (col.meeting) {
+    const list = asList(meetings);
+    const has = list.some(m => m.id === g.meetingId);
+    return (
+      <select value={has ? g.meetingId : ""} onChange={e => e.target.value === "__new" ? addMeetingFor(side, g.id) : updateGuest(side, g.id, "meetingId", e.target.value)} style={{ ...base, color: has ? C.text : C.sub }}>
+        <option value="">— 청모 없음</option>
+        {[...list].sort((a, b) => (!a.date) - (!b.date) || (a.date || "").localeCompare(b.date || "")).map(m => <option key={m.id} value={m.id}>{meetingLabel(m)}</option>)}
+        <option value="__new">＋ 새 청모 만들기</option>
+      </select>
+    );
+  }
   return <KoreanInput key={col.key + "-" + g.id} value={g[col.key] || ""} inputMode={col.num ? "numeric" : undefined} placeholder={col.num ? "0" : ""} onChange={v => updateGuest(side, g.id, col.key, col.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...base, textAlign: col.num ? "right" : "left" }} />;
 }
 
-function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sortGuests }) {
+function GuestView({ isMobile, wedding, setWedding, addGuest, updateGuest, removeGuest, sortGuests }) {
   const [side, setSide] = useState("bride");
   const [sort, setSort] = useState({ key: null, dir: 1 });
   const all = { groom: [], bride: [], ...(wedding.guests || {}) };
   const guests = all[side] || [];
-  const sideInfo = GUEST_SIDES.find(s => s.key === side);
+  const sideInfo = GUEST_SIDES.find(s => s.key === side) || GUEST_SIDES[1];
+  const meetings = asList(wedding.meetings);
+  // 하객 칸에서 '새 청모 만들기'를 고르면 빈 청모를 만들고 그 하객을 바로 넣어요. 날짜·식당은 🍽️ 청모에서 채워요.
+  function addMeetingFor(sideKey, gid) {
+    const m = newMeeting();
+    setWedding(p => ({ ...p, meetings: [...asList(p.meetings), m] }));
+    updateGuest(sideKey, gid, "meetingId", m.id);
+  }
+  const fieldProps = { side, updateGuest, meetings, addMeetingFor };
   const stats = GUEST_SIDES.map(s => ({ ...s, ...guestStats(all[s.key]) }));
   const sum = guestStats([...(all.groom || []), ...(all.bride || [])]);
 
@@ -856,11 +872,15 @@ function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sort
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           {GUEST_SIDES.map(s => (
             <button key={s.key} onClick={() => switchSide(s.key)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, border: `2px solid ${side === s.key ? s.color : C.border}`, background: side === s.key ? s.color : C.white, color: side === s.key ? C.white : C.sub, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
-              {s.emoji} {s.label} 하객 ({(all[s.key] || []).length})
+              {s.emoji} {s.label} ({(all[s.key] || []).length})
             </button>
           ))}
+          <button onClick={() => switchSide(MEET_INFO.key)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, border: `2px solid ${side === MEET_INFO.key ? MEET_INFO.color : C.border}`, background: side === MEET_INFO.key ? MEET_INFO.color : C.white, color: side === MEET_INFO.key ? C.white : C.sub, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+            {MEET_INFO.emoji} {MEET_INFO.label} ({meetings.length})
+          </button>
         </div>
 
+        {side === MEET_INFO.key ? <MeetingView isMobile={isMobile} wedding={wedding} setWedding={setWedding} /> : <>
         {isMobile ? (
           <>
             {guests.length > 0 && (
@@ -876,19 +896,19 @@ function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sort
                 <div key={g.id} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, borderLeft: `5px solid ${sideInfo.color}`, padding: "10px 12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 11, color: C.sub, width: 18 }}>{i + 1}</span>
-                    <GuestField g={g} col={GUEST_COLS[0]} side={side} updateGuest={updateGuest} style={{ fontSize: 14, fontWeight: 700 }} />
+                    <GuestField g={g} col={GUEST_COLS[0]} {...fieldProps} style={{ fontSize: 14, fontWeight: 700 }} />
                     <button onClick={() => confirmRemove(g)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 14, opacity: .7 }}>✕</button>
                   </div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
                     {GUEST_COLS.filter(c => c.cycle).map(c => (
-                      <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.sub, fontWeight: 700 }}>{c.label}<GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></span>
+                      <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.sub, fontWeight: 700 }}>{c.label}<GuestField g={g} col={c} {...fieldProps} /></span>
                     ))}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 10px", alignItems: "center" }}>
                     {GUEST_COLS.slice(1).filter(c => !c.cycle).map(c => (
                       <Fragment key={c.key}>
                         <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{c.label}</span>
-                        <div><GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></div>
+                        <div><GuestField g={g} col={c} {...fieldProps} /></div>
                       </Fragment>
                     ))}
                   </div>
@@ -910,7 +930,7 @@ function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sort
                 {guests.map((g, i) => (
                   <tr key={g.id} style={{ borderBottom: `1px solid ${C.pink1}` }}>
                     <td style={{ textAlign: "center", fontSize: 11, color: C.sub }}>{i + 1}</td>
-                    {GUEST_COLS.map(c => <td key={c.key} style={{ padding: "5px 4px", textAlign: c.cycle ? "center" : "left" }}><GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></td>)}
+                    {GUEST_COLS.map(c => <td key={c.key} style={{ padding: "5px 4px", textAlign: c.cycle ? "center" : "left" }}><GuestField g={g} col={c} {...fieldProps} /></td>)}
                     <td style={{ textAlign: "center" }}><button onClick={() => confirmRemove(g)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
                   </tr>
                 ))}
@@ -923,8 +943,132 @@ function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sort
         <button onClick={() => addGuest(side)} style={{ marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 10, border: `1.5px dashed ${sideInfo.color}`, background: "transparent", color: sideInfo.color, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>＋ {sideInfo.label} 하객 추가</button>
         <div style={{ marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" }}>
           💡 유형·참석·식사 칸은 누를 때마다 바뀌어요 (빈칸 → 모청/O → 종이/X → 빈칸).<br />
-          📊 요약표는 이름을 적은 하객만 세요. 청첩장모임 인원은 모임 날짜를 적은 하객 수예요.
+          📊 요약표는 이름을 적은 하객만 세요. 청첩장모임 인원은 🍽️ 청모를 고른 하객 수예요.<br />
+          🍽️ 청모 칸에서 모임을 고르면 돼요. 날짜·식당·식비는 위 🍽️ 청모 버튼에서 모임별로 한 번만 적어요.
         </div>
+        </>}
+    </>
+  );
+}
+
+// 🍽️ 청모(청첩장 모임): 모임마다 날짜·식당·총 식비를 한 번만 적고, 온 하객을 골라 넣어요.
+// 청모 하나 = { id, date, place, total, memo }, 하객은 meetingId로 어느 청모에 왔는지 가리켜요.
+const MEET_INFO = { key: "meet", label: "청모", emoji: "🍽️", color: "#E39B3A", bg: "#FFF4E3" };
+function meetingLabel(m) {
+  if (!m) return "";
+  const d = m.date ? `${Number(m.date.slice(5, 7))}/${Number(m.date.slice(8))}(${DAYS_KO[parseDate(m.date).getDay()]})` : "날짜 미정";
+  return `${d}${m.place ? " " + m.place : ""}`;
+}
+function newMeeting() { return { id: genId(), date: "", place: "", total: "", memo: "" }; }
+// 예전처럼 하객마다 적었던 청모 날짜·식당·1인금액을, 날짜+식당이 같은 사람끼리 청모 하나로 묶어 옮겨요
+function migrateMeetings(w) {
+  const guests = { groom: [], bride: [], ...((w && w.guests) || {}) };
+  const isLegacy = g => g && !g.meetingId && ((g.meetDate || "").trim() || (g.place || "").trim() || toWon(g.perPrice));
+  if (!["groom", "bride"].some(k => asList(guests[k]).some(isLegacy))) return null;
+  const meetings = [...asList(w.meetings)];
+  const byKey = {};
+  const strip = ({ meetDate, place, perPrice, ...rest }) => rest;
+  const next = {};
+  ["groom", "bride"].forEach(k => {
+    next[k] = asList(guests[k]).map(g => {
+      if (!isLegacy(g)) return strip(g);
+      const key = `${g.meetDate || ""}|${(g.place || "").trim()}`;
+      if (!byKey[key]) { byKey[key] = { ...newMeeting(), date: g.meetDate || "", place: (g.place || "").trim(), total: "0" }; meetings.push(byKey[key]); }
+      byKey[key].total = String(toWon(byKey[key].total) + toWon(g.perPrice));
+      return { ...strip(g), meetingId: byKey[key].id };
+    });
+  });
+  return { ...w, meetings, guests: { ...guests, ...next } };
+}
+
+function MeetingView({ isMobile, wedding, setWedding }) {
+  const meetings = asList(wedding.meetings);
+  const all = { groom: [], bride: [], ...(wedding.guests || {}) };
+  const people = GUEST_SIDES.flatMap(s => asList(all[s.key]).filter(g => (g.name || "").trim()).map(g => ({ ...g, side: s })));
+  const ids = new Set(meetings.map(m => m.id));
+  const members = m => people.filter(g => g.meetingId === m.id);
+  const free = people.filter(g => !ids.has(g.meetingId));
+  // 날짜 순으로 보여줘요. 날짜 없는 청모는 아래로 가요.
+  const shown = [...meetings].sort((a, b) => (!a.date) - (!b.date) || (a.date || "").localeCompare(b.date || ""));
+  const totalCost = meetings.reduce((s, m) => s + toWon(m.total), 0);
+  const met = people.filter(g => ids.has(g.meetingId)).length;
+
+  const setM = (id, patch) => setWedding(p => ({ ...p, meetings: asList(p.meetings).map(m => m.id === id ? { ...m, ...patch } : m) }));
+  function assign(sideKey, gid, meetingId) {
+    setWedding(p => {
+      const guests = { groom: [], bride: [], ...(p.guests || {}) };
+      return { ...p, guests: { ...guests, [sideKey]: asList(guests[sideKey]).map(g => g.id === gid ? { ...g, meetingId } : g) } };
+    });
+  }
+  function removeMeeting(m) {
+    const n = members(m).length;
+    if (!window.confirm(`${meetingLabel(m)} 청모를 지울까요?${n ? ` 들어 있던 하객 ${n}명은 '청모 없음'으로 바뀌어요.` : ""}`)) return;
+    setWedding(p => {
+      const guests = { groom: [], bride: [], ...(p.guests || {}) };
+      const clear = list => asList(list).map(g => g.meetingId === m.id ? { ...g, meetingId: "" } : g);
+      return { ...p, meetings: asList(p.meetings).filter(x => x.id !== m.id), guests: { ...guests, groom: clear(guests.groom), bride: clear(guests.bride) } };
+    });
+  }
+
+  const stat = (label, value, sub) => (
+    <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: C.text, marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: C.sub, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
+        {stat("청모 횟수", `${meetings.length}번`)}
+        {stat("만난 하객", `${met}명`, free.length ? `아직 안 만난 하객 ${free.length}명` : null)}
+        {stat("청모 총 식비", `${fmtWon(totalCost)}원`, met ? `1인당 평균 ${fmtWon(Math.round(totalCost / met))}원` : null)}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+        {shown.map(m => {
+          const list = members(m);
+          const per = list.length ? Math.round(toWon(m.total) / list.length) : 0;
+          return (
+            <div key={m.id} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, borderTop: `5px solid ${MEET_INFO.color}`, padding: "10px 12px" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                <input type="date" value={m.date || ""} onChange={e => setM(m.id, { date: e.target.value })} style={{ ...smallInp, width: 140, flex: "none" }} />
+                <KoreanInput key={"mplace-" + m.id} value={m.place || ""} onChange={v => setM(m.id, { place: v })} placeholder="🍽️ 식당" style={{ ...smallInp, flex: 1, fontWeight: 800 }} />
+                <button onClick={() => removeMeeting(m)} title="청모 지우기" style={{ ...iconBtn, color: C.tomato }}>🗑️</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>💰 총 식비</span>
+                <KoreanInput key={"mtotal-" + m.id} value={m.total || ""} inputMode="numeric" placeholder="0" onChange={v => setM(m.id, { total: v.replace(/[^\d]/g, "") })} style={{ ...smallInp, width: 110, flex: "none", textAlign: "right" }} />
+                <span style={{ fontSize: 12, fontWeight: 800, color: MEET_INFO.color }}>{list.length}명{list.length ? ` · 1인당 ${fmtWon(per)}원` : ""}</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {list.map(g => (
+                  <span key={g.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 6px 4px 10px", borderRadius: 99, background: g.side.bg, border: `1.5px solid ${g.side.color}55`, fontSize: 12, fontWeight: 700, color: C.text }}>
+                    {g.side.emoji} {g.name}
+                    <button onClick={() => assign(g.side.key, g.id, "")} title="이 청모에서 빼기" style={{ ...iconBtn, fontSize: 11, padding: "0 2px" }}>✕</button>
+                  </span>
+                ))}
+                {list.length === 0 && <span style={{ fontSize: 12, color: C.sub }}>아직 아무도 없어요. 아래에서 하객을 넣어봐요</span>}
+              </div>
+              <select value="" onChange={e => { const [sk, gid] = e.target.value.split(":"); if (gid) assign(sk, gid, m.id); }} style={{ ...smallInp, marginBottom: 6, color: C.sub }}>
+                <option value="">＋ 하객 넣기 {free.length ? `(${free.length}명 남음)` : "(남은 하객 없음)"}</option>
+                {GUEST_SIDES.map(s => {
+                  const opts = free.filter(g => g.side.key === s.key);
+                  return opts.length ? <optgroup key={s.key} label={`${s.emoji} ${s.label}`}>{opts.map(g => <option key={g.id} value={`${s.key}:${g.id}`}>{g.name}</option>)}</optgroup> : null;
+                })}
+              </select>
+              <KoreanInput key={"mmemo-" + m.id} value={m.memo || ""} onChange={v => setM(m.id, { memo: v })} placeholder="메모 (예: 2차 카페, 선물 받음)" style={smallInp} />
+            </div>
+          );
+        })}
+      </div>
+      {meetings.length === 0 && <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: C.sub }}>아직 청모가 없어요. 아래 버튼으로 첫 청모를 만들어봐요 🍽️</div>}
+      <button onClick={() => setWedding(p => ({ ...p, meetings: [...asList(p.meetings), newMeeting()] }))} style={{ marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 10, border: `1.5px dashed ${MEET_INFO.color}`, background: "transparent", color: MEET_INFO.color, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>＋ 새 청모 추가</button>
+      <div style={tipBox}>
+        💡 청모마다 날짜·식당·총 식비를 한 번만 적으면 인원과 1인당 비용이 자동으로 계산돼요.<br />
+        👥 하객 표의 🍽️ 청모 칸에서 골라도 되고, 여기서 '하객 넣기'로 넣어도 돼요. 이름을 적은 하객만 고를 수 있어요.
+      </div>
     </>
   );
 }
@@ -1796,6 +1940,12 @@ export default function App() {
   }
   function openJjantech(ds) { setSelDate(ds); setTab("jjantech"); }
 
+  // 예전 하객 표(하객마다 청모 날짜·식당·1인금액)를 청모 목록으로 한 번 옮겨줘요
+  useEffect(() => {
+    const migrated = migrateMeetings(wedding);
+    if (migrated) setWeddingS(migrated);
+  }, [wedding]);
+
   // 하객 관리: Firebase는 빈 배열을 저장하지 않아서 없는 쪽은 빈 목록으로 채워 읽어요
   function updateGuests(side, fn) {
     setWeddingS(p => {
@@ -1804,7 +1954,7 @@ export default function App() {
     });
   }
   function addGuest(side) {
-    updateGuests(side, list => [...list, { id: genId(), name: "", type: "", meetDate: "", place: "", perPrice: "", attend: "", meal: "", gift: "", memo: "" }]);
+    updateGuests(side, list => [...list, { id: genId(), name: "", type: "", meetingId: "", attend: "", meal: "", gift: "", memo: "" }]);
   }
   function updateGuest(side, id, key, value) {
     updateGuests(side, list => list.map(g => g.id === id ? { ...g, [key]: value } : g));
@@ -1815,8 +1965,11 @@ export default function App() {
   // 정렬은 저장된 순서 자체를 바꿔요. 그래서 고치는 도중에 줄이 갑자기 움직이지 않아요. 빈칸은 항상 맨 아래로 가요.
   function sortGuests(side, key, dir) {
     const col = GUEST_COLS.find(c => c.key === key);
-    const val = g => col && col.num ? toWon(g[key]) : (g[key] || "");
-    const empty = g => !(g[key] || "").toString().trim();
+    // 청모는 모임 날짜(없으면 맨 뒤)와 식당 순으로 정렬해요
+    const meetings = asList(weddingRef.current && weddingRef.current.meetings);
+    const meetOf = g => meetings.find(m => m.id === g.meetingId);
+    const val = g => col && col.num ? toWon(g[key]) : col && col.meeting ? `${(meetOf(g) || {}).date || "9999"}|${(meetOf(g) || {}).place || ""}` : (g[key] || "");
+    const empty = g => col && col.meeting ? !meetOf(g) : !(g[key] || "").toString().trim();
     updateGuests(side, list => [...list].sort((a, b) => {
       if (empty(a) || empty(b)) return empty(a) - empty(b);
       const x = val(a), y = val(b);
