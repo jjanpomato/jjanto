@@ -803,7 +803,7 @@ function GuestField({ g, col, side, updateGuest, style }) {
   return <KoreanInput key={col.key + "-" + g.id} value={g[col.key] || ""} inputMode={col.num ? "numeric" : undefined} placeholder={col.num ? "0" : ""} onChange={v => updateGuest(side, g.id, col.key, col.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...base, textAlign: col.num ? "right" : "left" }} />;
 }
 
-function WeddingView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sortGuests }) {
+function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sortGuests }) {
   const [side, setSide] = useState("bride");
   const [sort, setSort] = useState({ key: null, dir: 1 });
   const all = { groom: [], bride: [], ...(wedding.guests || {}) };
@@ -828,9 +828,7 @@ function WeddingView({ isMobile, wedding, addGuest, updateGuest, removeGuest, so
   const sortMark = k => sort.key === k ? (sort.dir === 1 ? " ▲" : " ▼") : " ⇅";
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
-      <div style={{ maxWidth: 1240, margin: "0 auto" }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: C.rose, marginBottom: 12 }}>💍 하객 참석 체크리스트</div>
+    <>
 
         {/* 요약표: 이름을 적은 줄만 세요 */}
         <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}`, overflowX: "auto", marginBottom: 16 }}>
@@ -927,6 +925,297 @@ function WeddingView({ isMobile, wedding, addGuest, updateGuest, removeGuest, so
           💡 유형·참석·식사 칸은 누를 때마다 바뀌어요 (빈칸 → 모청/O → 종이/X → 빈칸).<br />
           📊 요약표는 이름을 적은 하객만 세요. 청첩장모임 인원은 모임 날짜를 적은 하객 수예요.
         </div>
+    </>
+  );
+}
+
+// Firebase는 빈 배열을 저장하지 않아서, 없으면 빈 목록으로 읽어요
+function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : []; }
+const smallInp = { width: "100%", minWidth: 0, boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: "none", background: "#FFF8FA", color: C.text, padding: "6px 8px", fontFamily: "inherit" };
+const dashedAddBtn = { width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" };
+const tipBox = { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" };
+function editBtn(on) { return { padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: on ? C.green : C.rose, flexShrink: 0 }; }
+
+// ✅ 준비할 것: 시기별로 묶은 체크리스트. 처음엔 비어 있고, 기본 목록을 불러온 뒤 고쳐 쓰면 돼요.
+const TASK_STAGES = [
+  { key: "m12",   label: "D-12~9개월", items: ["양가 인사·상견례", "결혼 예산 정하기", "결혼 날짜·지역 정하기", "웨딩홀 투어·계약", "웨딩플래너 정하기 (or 셀프)"] },
+  { key: "m8",    label: "D-8~6개월",  items: ["스드메(스튜디오·드레스·메이크업) 계약", "본식 스냅·영상 업체 계약", "신혼여행지 정하고 예약", "신혼집 알아보기"] },
+  { key: "m5",    label: "D-5~3개월",  items: ["예물·예단 정하기", "혼수 가전·가구 리스트 만들기", "웨딩 촬영", "한복·예복 맞추기"] },
+  { key: "m2",    label: "D-2~1개월",  items: ["청첩장 디자인·제작", "모바일 청첩장 만들기", "청첩장 모임 일정 잡기", "사회자·축가 부탁하기", "드레스 가봉", "본식 식순 정하기"] },
+  { key: "w2",    label: "D-2주~당일", items: ["하객 최종 인원·보증인원 확정", "식권·답례품 확인", "혼주 메이크업 예약", "축의금 받아줄 사람 부탁하기", "당일 준비물 챙기기"] },
+  { key: "after", label: "결혼 후",    items: ["감사 인사 연락", "축의금 정리", "혼인신고"] },
+];
+function TaskView({ isMobile, wedding, setWedding }) {
+  const [editMode, setEditMode] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+  const tasks = asList(wedding.tasks);
+  const done = tasks.filter(t => t.done).length;
+  const pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
+  const upd = fn => setWedding(p => ({ ...p, tasks: fn(asList(p.tasks)) }));
+  const setTask = (id, patch) => upd(list => list.map(t => t.id === id ? { ...t, ...patch } : t));
+
+  function loadTemplate() {
+    upd(list => [...list, ...TASK_STAGES.flatMap(s => s.items.map(title => ({ id: genId(), stage: s.key, title, done: false, due: "" })))]);
+  }
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.white, borderRadius: 16, padding: "12px 16px", border: `1.5px solid ${C.border}`, marginBottom: 12, boxShadow: `0 2px 10px ${C.pink1}` }}>
+        <Ring pct={pct} size={52} stroke={6} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>✅ 결혼 준비 진행률</div>
+          <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 2 }}>{tasks.length ? `${done}/${tasks.length}개 완료` : "아직 준비 목록이 없어요"}</div>
+        </div>
+        {!editMode && tasks.length > 0 && <button onClick={() => setHideDone(p => !p)} style={{ padding: "5px 10px", borderRadius: 99, border: `1.5px solid ${hideDone ? C.rose : C.border}`, background: hideDone ? C.rose + "18" : C.white, color: hideDone ? C.rose : C.sub, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>{hideDone ? "완료 숨김" : "완료 숨기기"}</button>}
+        <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "편집"}</button>
+      </div>
+
+      {tasks.length === 0 && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>시기별로 많이 하는 준비 목록을 불러와서 우리한테 맞게 고쳐 써봐요 💍</div>
+          <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 준비 목록 불러오기</button>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+        {TASK_STAGES.map(s => {
+          const items = tasks.filter(t => t.stage === s.key);
+          if (!editMode && items.length === 0) return null;
+          const shown = hideDone && !editMode ? items.filter(t => !t.done) : items;
+          const sDone = items.filter(t => t.done).length;
+          return (
+            <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px", background: "#FFF3F1", borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 900, color: C.rose }}>{s.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 800, color: sDone === items.length && items.length ? "#4CAF84" : C.sub }}>{sDone}/{items.length}</span>
+              </div>
+              <div style={{ padding: "6px 10px" }}>
+                {shown.map(t => editMode ? (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                    <KoreanInput key={"task-" + t.id} value={t.title} onChange={v => setTask(t.id, { title: v })} style={{ ...smallInp, flex: 1 }} />
+                    <input type="date" value={t.due || ""} onChange={e => setTask(t.id, { due: e.target.value })} title="언제까지" style={{ ...smallInp, width: 130, flex: "none" }} />
+                    <button onClick={() => upd(list => list.filter(x => x.id !== t.id))} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                  </div>
+                ) : (
+                  <div key={t.id} onClick={() => setTask(t.id, { done: !t.done })} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 2px", borderBottom: `1px dashed ${C.pink1}`, cursor: "pointer", userSelect: "none" }}>
+                    <WeeklyCheckbox checked={!!t.done} onToggle={() => {}} />
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: t.done ? 500 : 700, color: t.done ? C.sub : C.text, textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
+                    {t.due && <span style={{ fontSize: 11, fontWeight: 700, color: !t.done && t.due < todayStr ? C.tomato : C.sub, flexShrink: 0 }}>~{t.due.slice(5).replace("-", "/")}</span>}
+                  </div>
+                ))}
+                {!editMode && hideDone && items.length > 0 && shown.length === 0 && <div style={{ fontSize: 12, color: "#4CAF84", fontWeight: 700, padding: "8px 2px" }}>🎉 이 시기 준비 끝!</div>}
+                {editMode && <button onClick={() => upd(list => [...list, { id: genId(), stage: s.key, title: "새 할 일", done: false, due: "" }])} style={{ ...dashedAddBtn, marginTop: 6, padding: "6px 0" }}>＋ 추가</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {editMode && (
+        <div style={tipBox}>
+          ✏️ 할 일 이름을 바로 고칠 수 있고, 날짜를 넣으면 "~11/30"처럼 마감일이 보여요. 지난 마감일은 빨갛게 보여요.<br />
+          {tasks.length > 0 && <>📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 목록 한 번 더 불러오기</span> (지금 목록 뒤에 덧붙여져요)</>}
+        </div>
+      )}
+    </>
+  );
+}
+
+// 💰 예산표: 항목마다 예산·실제 금액·낸 돈을 적으면 잔금과 남은 예산이 자동으로 계산돼요.
+const BUDGET_TEMPLATE = [
+  ["웨딩홀", "대관료·식대"], ["스드메", "스튜디오·드레스·메이크업"], ["본식", "스냅·영상"], ["예물", "반지·시계"],
+  ["예단", ""], ["한복·예복", ""], ["청첩장", "종이·모바일"], ["신혼여행", "항공·숙소"], ["혼수", "가전·가구"], ["기타", "답례품·부케 등"],
+];
+const BUDGET_COLS = [
+  { key: "cat",  label: "분류",          w: 100 },
+  { key: "item", label: "내용",          w: 150 },
+  { key: "plan", label: "예산",          w: 110, num: true },
+  { key: "cost", label: "실제(계약) 금액", w: 110, num: true },
+  { key: "paid", label: "낸 돈",         w: 110, num: true },
+  { key: "memo", label: "메모",          w: 150 },
+];
+function BudgetView({ isMobile, wedding, setWedding }) {
+  const budget = wedding.budget || {};
+  const items = asList(budget.items);
+  const upd = fn => setWedding(p => ({ ...p, budget: fn({ ...(p.budget || {}), items: asList(p.budget && p.budget.items) }) }));
+  const setItem = (id, key, v) => upd(b => ({ ...b, items: b.items.map(it => it.id === id ? { ...it, [key]: v } : it) }));
+  const addItem = (cat = "", item = "") => ({ id: genId(), cat, item, plan: "", cost: "", paid: "", memo: "" });
+  function removeItem(it) {
+    if (window.confirm(`${it.cat || it.item || "이"} 항목을 지울까요?`)) upd(b => ({ ...b, items: b.items.filter(x => x.id !== it.id) }));
+  }
+
+  const sumOf = k => items.reduce((s, it) => s + toWon(it[k]), 0);
+  const plan = sumOf("plan"), cost = sumOf("cost"), paid = sumOf("paid");
+  // 예상 지출: 계약한 항목은 실제 금액, 아직이면 예산으로 쳐요
+  const expected = items.reduce((s, it) => s + (toWon(it.cost) || toWon(it.plan)), 0);
+  const balance = items.reduce((s, it) => s + Math.max(0, toWon(it.cost) - toWon(it.paid)), 0);
+  const total = toWon(budget.total);
+  const left = total - expected;
+
+  const card = (label, value, color = C.text, sub) => (
+    <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color, marginTop: 2 }}>{fmtWon(value)}원</div>
+      {sub && <div style={{ fontSize: 10, color: C.sub, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+  const field = (it, c, style) => <KoreanInput key={c.key + "-" + it.id} value={it[c.key] || ""} inputMode={c.num ? "numeric" : undefined} placeholder={c.num ? "0" : ""} onChange={v => setItem(it.id, c.key, c.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...smallInp, textAlign: c.num ? "right" : "left", ...style }} />;
+  const rest = it => Math.max(0, toWon(it.cost) - toWon(it.paid));
+
+  return (
+    <>
+      <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, padding: "12px 14px", marginBottom: 10, boxShadow: `0 2px 10px ${C.pink1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>💰 총 예산</span>
+        <KoreanInput key="budget-total" value={budget.total || ""} inputMode="numeric" placeholder="예) 30000000" onChange={v => setWedding(p => ({ ...p, budget: { ...(p.budget || {}), total: v.replace(/[^\d]/g, "") } }))} style={{ ...smallInp, width: 160, textAlign: "right", fontSize: 14, fontWeight: 800 }} />
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>원{total > 0 && ` (${fmtWon(total)}원)`}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 8, marginBottom: 14 }}>
+        {card("예산 합계", plan)}
+        {card("실제(계약) 합계", cost)}
+        {card("낸 돈", paid, "#4CAF84")}
+        {card("남은 잔금", balance, C.tomato, "계약했는데 아직 안 낸 돈")}
+        {card(left >= 0 ? "총 예산 대비 여유" : "총 예산 초과", Math.abs(left), left >= 0 ? "#4CAF84" : C.tomato, total ? "계약 전 항목은 예산으로 계산" : "위에 총 예산을 적어주세요")}
+      </div>
+
+      {items.length === 0 && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>자주 쓰는 분류를 불러와서 금액만 채워봐요 💰</div>
+          <button onClick={() => upd(b => ({ ...b, items: BUDGET_TEMPLATE.map(([c, i]) => addItem(c, i)) }))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 분류 불러오기</button>
+        </div>
+      )}
+
+      {items.length > 0 && (isMobile ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {items.map(it => (
+            <div key={it.id} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, borderLeft: `5px solid ${C.pink3}`, padding: "10px 12px" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                {field(it, BUDGET_COLS[0], { fontWeight: 800, width: 100, flex: "none" })}
+                {field(it, BUDGET_COLS[1], { flex: 1 })}
+                <button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 14, opacity: .7 }}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 10px", alignItems: "center" }}>
+                {BUDGET_COLS.slice(2).map(c => (
+                  <Fragment key={c.key}>
+                    <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{c.label}</span>
+                    <div>{field(it, c)}</div>
+                  </Fragment>
+                ))}
+                <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>잔금</span>
+                <span style={{ fontSize: 13, fontWeight: 800, textAlign: "right", color: rest(it) ? C.tomato : C.sub, paddingRight: 8 }}>{fmtWon(rest(it))}원</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr>
+                {BUDGET_COLS.slice(0, 5).map(c => <th key={c.key} style={{ padding: "8px 6px", fontSize: 12, fontWeight: 800, color: C.white, background: C.pink3, whiteSpace: "nowrap", minWidth: c.w }}>{c.label}</th>)}
+                <th style={{ padding: "8px 6px", fontSize: 12, fontWeight: 800, color: C.white, background: C.pink3, whiteSpace: "nowrap", minWidth: 100 }}>잔금</th>
+                <th style={{ padding: "8px 6px", fontSize: 12, fontWeight: 800, color: C.white, background: C.pink3, minWidth: 150 }}>메모</th>
+                <th style={{ background: C.pink3, width: 30 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(it => (
+                <tr key={it.id} style={{ borderBottom: `1px solid ${C.pink1}` }}>
+                  {BUDGET_COLS.slice(0, 5).map(c => <td key={c.key} style={{ padding: "5px 4px" }}>{field(it, c, c.key === "cat" ? { fontWeight: 800 } : undefined)}</td>)}
+                  <td style={{ padding: "5px 8px", textAlign: "right", fontSize: 13, fontWeight: 800, color: rest(it) ? C.tomato : C.sub, whiteSpace: "nowrap" }}>{fmtWon(rest(it))}원</td>
+                  <td style={{ padding: "5px 4px" }}>{field(it, BUDGET_COLS[5])}</td>
+                  <td style={{ textAlign: "center" }}><button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
+                </tr>
+              ))}
+              <tr style={{ background: "#FFF3F1" }}>
+                <td colSpan={2} style={{ padding: "8px", fontSize: 13, fontWeight: 900, textAlign: "center" }}>합 계</td>
+                {[plan, cost, paid, balance].map((v, i) => <td key={i} style={{ padding: "8px", fontSize: 13, fontWeight: 900, textAlign: "right", whiteSpace: "nowrap", color: i === 3 && v ? C.tomato : C.text }}>{fmtWon(v)}원</td>)}
+                <td colSpan={2} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {items.length > 0 && <button onClick={() => upd(b => ({ ...b, items: [...b.items, addItem()] }))} style={{ ...dashedAddBtn, marginTop: 10 }}>＋ 예산 항목 추가</button>}
+      <div style={tipBox}>
+        💡 <b>예산</b>은 쓰기로 마음먹은 돈, <b>실제(계약) 금액</b>은 계약서에 적힌 돈, <b>낸 돈</b>은 계약금처럼 이미 보낸 돈이에요.<br />
+        🧾 <b>잔금</b> = 실제 금액 − 낸 돈. 계약하고 아직 안 낸 나머지 돈이에요.
+      </div>
+    </>
+  );
+}
+
+// 🗒️ 결혼 메모: 릴스에서 본 팁, 업체 상담 내용, 캡처 사진을 모아둬요
+function WeddingMemoView({ wedding, setWedding }) {
+  const [text, setText] = useState("");
+  const [img, setImg] = useState(null);
+  const [inputKey, setInputKey] = useState(0);
+  const [search, setSearch] = useState("");
+  const fileRef = useRef(null);
+  const memos = asList(wedding.memos);
+  const upd = fn => setWedding(p => ({ ...p, memos: fn(asList(p.memos)) }));
+  const q = search.trim().toLowerCase();
+  const shown = q ? memos.filter(m => (m.text || "").toLowerCase().includes(q)) : memos;
+
+  function add() {
+    if (!text.trim() && !img) return;
+    upd(list => [{ id: genId(), text: text.trim(), image: img, createdAt: new Date().toISOString() }, ...list]);
+    setText(""); setImg(null); setInputKey(k => k + 1);
+  }
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: C.sub }}>🔍</span>
+        <KoreanInput value={search} onChange={setSearch} placeholder="결혼 메모 검색..." style={{ width: "100%", padding: "9px 12px 9px 34px", border: `1.5px solid ${C.border}`, borderRadius: 12, fontSize: 13, outline: "none", fontFamily: "inherit", background: C.white, color: C.text, boxSizing: "border-box" }} />
+      </div>
+      {img && (
+        <div style={{ position: "relative", display: "inline-block", marginBottom: 10 }}>
+          <img src={img} alt="preview" style={{ maxHeight: 120, borderRadius: 8, border: `1.5px solid ${C.border}` }} />
+          <button onClick={() => setImg(null)} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>✕</button>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, alignItems: "flex-end" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <KoreanTextarea key={"wmemo-" + inputKey} value={text} onChange={setText} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } }} placeholder="릴스에서 본 팁, 상담 내용 등... (Enter로 저장, Shift+Enter 줄바꿈)" rows={3} style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: 14, fontSize: 14, outline: "none", fontFamily: "inherit", background: "#FFF8FA", color: C.text, resize: "none", lineHeight: 1.6, boxSizing: "border-box" }} />
+          <div>
+            <button onClick={() => fileRef.current?.click()} style={{ padding: "6px 12px", borderRadius: 10, background: C.pink1, color: C.rose, border: `1px solid ${C.border}`, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>📷 사진 첨부</button>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) compressImage(f, setImg); e.target.value = ""; }} />
+          </div>
+        </div>
+        <button onClick={add} style={{ padding: "10px 18px", borderRadius: 14, background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, border: "none", fontWeight: 800, fontSize: 14, cursor: "pointer", flexShrink: 0, height: 52 }}>저장</button>
+      </div>
+      {memos.length === 0 && <div style={{ textAlign: "center", padding: "30px 0", color: C.sub, fontSize: 13 }}><div style={{ fontSize: 32, marginBottom: 8 }}>💌</div>릴스 캡처나 상담 메모를 모아봐요!</div>}
+      {memos.length > 0 && shown.length === 0 && <div style={{ textAlign: "center", padding: "30px 0", color: C.sub, fontSize: 13 }}>"{search}"에 대한 검색 결과가 없어요</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {shown.map(m => <MemoCard key={m.id} m={m}
+          editMemo={(id, t, image) => upd(list => list.map(x => x.id === id ? { ...x, text: t, image, updatedAt: new Date().toISOString() } : x))}
+          deleteMemo={id => { if (window.confirm("이 메모를 지울까요?")) upd(list => list.filter(x => x.id !== id)); }} />)}
+      </div>
+    </div>
+  );
+}
+
+// 💍 결혼준비 탭: 하객 · 준비할 것 · 예산 · 메모를 위쪽 작은 탭으로 오가요
+const WEDDING_TABS = [
+  { key: "guests", label: "👥 하객" },
+  { key: "tasks",  label: "✅ 준비할 것" },
+  { key: "budget", label: "💰 예산" },
+  { key: "memo",   label: "🗒️ 메모" },
+];
+function WeddingView(props) {
+  const { isMobile } = props;
+  const [sub, setSub] = useState(() => load("jjanto_wedding_tab", "guests"));
+  function pick(k) { setSub(k); save("jjanto_wedding_tab", k); }
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
+      <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+          {WEDDING_TABS.map(t => (
+            <button key={t.key} onClick={() => pick(t.key)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 99, border: `2px solid ${sub === t.key ? C.rose : C.border}`, background: sub === t.key ? C.rose + "14" : C.white, color: sub === t.key ? C.rose : C.sub, fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{t.label}</button>
+          ))}
+        </div>
+        {sub === "guests" && <GuestView {...props} />}
+        {sub === "tasks"  && <TaskView {...props} />}
+        {sub === "budget" && <BudgetView {...props} />}
+        {sub === "memo"   && <WeddingMemoView {...props} />}
       </div>
     </div>
   );
@@ -1150,7 +1439,7 @@ export default function App() {
       )}
       {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} clearJjantechItems={clearJjantechItems} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
       {tab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
-      {tab==="wedding"&&<WeddingView isMobile={isMobile} wedding={wedding||EMPTY_WEDDING} addGuest={addGuest} updateGuest={updateGuest} removeGuest={removeGuest} sortGuests={sortGuests}/>}
+      {tab==="wedding"&&<WeddingView isMobile={isMobile} wedding={wedding||EMPTY_WEDDING} setWedding={setWeddingS} addGuest={addGuest} updateGuest={updateGuest} removeGuest={removeGuest} sortGuests={sortGuests}/>}
       {tab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
     </>
   );
