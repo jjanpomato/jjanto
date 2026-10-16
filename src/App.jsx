@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { pushPlannerData, subscribePlannerData } from "./firebase";
 
 const C = {
@@ -197,9 +197,9 @@ function repeatIcon(item) {
   return "🔁";
 }
 
-function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text" }) {
+function KoreanInput({ value, onChange, style, placeholder, autoFocus, type="text", inputMode }) {
   const composing = useRef(false);
-  return <input type={type} defaultValue={value} placeholder={placeholder} autoFocus={autoFocus} style={style} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={(e)=>{composing.current=false;onChange(e.target.value);}} onChange={(e)=>{if(!composing.current)onChange(e.target.value);}}/>;
+  return <input type={type} defaultValue={value} placeholder={placeholder} autoFocus={autoFocus} inputMode={inputMode} style={style} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={(e)=>{composing.current=false;onChange(e.target.value);}} onChange={(e)=>{if(!composing.current)onChange(e.target.value);}}/>;
 }
 function KoreanTextarea({ value, onChange, style, placeholder, rows, onKeyDown }) {
   const composing = useRef(false);
@@ -755,6 +755,884 @@ function MemoView({isMobile, memos, memoInput, setMemoInput, addMemo, editMemo, 
   );
 }
 
+// 💍 결혼준비 › 하객 관리: 신랑측·신부측 하객을 한 줄씩 적고, 위 요약표는 자동으로 계산돼요.
+// 하객 한 명 = { id, name, type:"모청"|"종이"|"", meetDate, place, perPrice, attend:"O"|"X"|"", meal:"O"|"X"|"", gift, memo }
+const EMPTY_WEDDING = { guests: { groom: [], bride: [] } };
+const GUEST_SIDES = [
+  { key: "groom", label: "신랑측", emoji: "💙", color: "#5B9BD5", bg: "#EEF5FC" },
+  { key: "bride", label: "신부측", emoji: "🩷", color: "#E77FA6", bg: "#FDEFF4" },
+];
+const GUEST_COLS = [
+  { key: "name",     label: "이름",            w: 110 },
+  { key: "type",     label: "유형",            w: 64,  cycle: ["", "모청", "종이"] },
+  { key: "meetDate", label: "청첩장모임 날짜", w: 138 },
+  { key: "place",    label: "🍽️ 식당",         w: 130 },
+  { key: "perPrice", label: "💰 1인금액",      w: 96,  num: true },
+  { key: "attend",   label: "참석",            w: 52,  cycle: ["", "O", "X"] },
+  { key: "meal",     label: "식사",            w: 52,  cycle: ["", "O", "X"] },
+  { key: "gift",     label: "축의금",          w: 100, num: true },
+  { key: "memo",     label: "메모",            w: 150 },
+];
+function toWon(v) { return Number(String(v || "").replace(/[^\d]/g, "")) || 0; }
+function fmtWon(n) { return n.toLocaleString("ko-KR"); }
+function guestStats(list) {
+  const rows = (list || []).filter(g => (g.name || "").trim());
+  const total = rows.length;
+  const yes = rows.filter(g => g.attend === "O").length;
+  return {
+    total, yes, rest: total - yes,
+    pct: total ? Math.round(yes / total * 100) : 0,
+    meet: rows.filter(g => g.meetDate).length,
+    gift: rows.reduce((s, g) => s + toWon(g.gift), 0),
+  };
+}
+function nextInCycle(cycle, v) { return cycle[(cycle.indexOf(v || "") + 1) % cycle.length]; }
+
+function CycleChip({ value, onClick }) {
+  const style = value === "O" ? { background: "#E3F4EA", color: "#2E8B57", border: "1.5px solid #9ED4B4" }
+    : value === "X" ? { background: "#FDECEC", color: "#D64545", border: "1.5px solid #F2B0B0" }
+    : value ? { background: C.pink1, color: C.rose, border: `1.5px solid ${C.pink2}` }
+    : { background: C.white, color: C.pink2, border: `1.5px dashed ${C.border}` };
+  return <button onClick={onClick} style={{ ...style, minWidth: 40, padding: "4px 8px", borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{value || "—"}</button>;
+}
+
+function GuestField({ g, col, side, updateGuest, style }) {
+  if (col.cycle) return <CycleChip value={g[col.key]} onClick={() => updateGuest(side, g.id, col.key, nextInCycle(col.cycle, g[col.key]))} />;
+  const base = { width: "100%", minWidth: 0, boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: "none", background: "#FFF8FA", color: C.text, padding: "6px 8px", fontFamily: "inherit", ...style };
+  if (col.key === "meetDate") return <input type="date" value={g.meetDate || ""} onChange={e => updateGuest(side, g.id, "meetDate", e.target.value)} style={base} />;
+  return <KoreanInput key={col.key + "-" + g.id} value={g[col.key] || ""} inputMode={col.num ? "numeric" : undefined} placeholder={col.num ? "0" : ""} onChange={v => updateGuest(side, g.id, col.key, col.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...base, textAlign: col.num ? "right" : "left" }} />;
+}
+
+function GuestView({ isMobile, wedding, addGuest, updateGuest, removeGuest, sortGuests }) {
+  const [side, setSide] = useState("bride");
+  const [sort, setSort] = useState({ key: null, dir: 1 });
+  const all = { groom: [], bride: [], ...(wedding.guests || {}) };
+  const guests = all[side] || [];
+  const sideInfo = GUEST_SIDES.find(s => s.key === side);
+  const stats = GUEST_SIDES.map(s => ({ ...s, ...guestStats(all[s.key]) }));
+  const sum = guestStats([...(all.groom || []), ...(all.bride || [])]);
+
+  function handleSort(key) {
+    const dir = sort.key === key ? -sort.dir : 1;
+    setSort({ key, dir });
+    sortGuests(side, key, dir);
+  }
+  function confirmRemove(g) {
+    if (window.confirm(`${(g.name || "").trim() || "이름 없는 하객"} 줄을 지울까요?`)) removeGuest(side, g.id);
+  }
+  function switchSide(k) { setSide(k); setSort({ key: null, dir: 1 }); }
+
+  const th = { padding: "8px 6px", fontSize: 12, fontWeight: 800, color: C.white, whiteSpace: "nowrap", background: sideInfo.color, cursor: "pointer", userSelect: "none" };
+  const sumCell = { padding: "8px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" };
+  const sumBold = { ...sumCell, fontWeight: 900 };
+  const sortMark = k => sort.key === k ? (sort.dir === 1 ? " ▲" : " ▼") : " ⇅";
+
+  return (
+    <>
+
+        {/* 요약표: 이름을 적은 줄만 세요 */}
+        <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}`, overflowX: "auto", marginBottom: 16 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
+            <thead>
+              <tr>{["구분", "총 초대", "참석 (O)", "미정/불참", "참석률", "청첩장모임 인원", "축의금 합계"].map(h => <th key={h} style={{ padding: "9px 6px", fontSize: 12, fontWeight: 800, color: C.white, background: "#3A3A3A", whiteSpace: "nowrap" }}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {stats.map(s => (
+                <tr key={s.key} style={{ background: s.bg }}>
+                  <td style={{ ...sumCell, fontWeight: 800 }}>{s.emoji} {s.label}</td>
+                  <td style={sumCell}>{s.total}</td><td style={sumCell}>{s.yes}</td><td style={sumCell}>{s.rest}</td>
+                  <td style={sumCell}>{s.pct}%</td><td style={sumCell}>{s.meet}</td><td style={sumCell}>{fmtWon(s.gift)}원</td>
+                </tr>
+              ))}
+              <tr style={{ background: "#F3F0EF" }}>
+                <td style={sumBold}>합 계</td>
+                <td style={sumBold}>{sum.total}</td><td style={sumBold}>{sum.yes}</td><td style={sumBold}>{sum.rest}</td>
+                <td style={sumBold}>{sum.pct}%</td><td style={sumBold}>{sum.meet}</td><td style={sumBold}>{fmtWon(sum.gift)}원</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {GUEST_SIDES.map(s => (
+            <button key={s.key} onClick={() => switchSide(s.key)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, border: `2px solid ${side === s.key ? s.color : C.border}`, background: side === s.key ? s.color : C.white, color: side === s.key ? C.white : C.sub, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
+              {s.emoji} {s.label} 하객 ({(all[s.key] || []).length})
+            </button>
+          ))}
+        </div>
+
+        {isMobile ? (
+          <>
+            {guests.length > 0 && (
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, paddingBottom: 2 }}>
+                <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, alignSelf: "center", flexShrink: 0 }}>정렬</span>
+                {GUEST_COLS.filter(c => c.key !== "memo").map(c => (
+                  <button key={c.key} onClick={() => handleSort(c.key)} style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 99, border: `1.5px solid ${sort.key === c.key ? sideInfo.color : C.border}`, background: sort.key === c.key ? sideInfo.bg : C.white, color: sort.key === c.key ? sideInfo.color : C.sub, fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{c.label}{sort.key === c.key ? (sort.dir === 1 ? " ▲" : " ▼") : ""}</button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {guests.map((g, i) => (
+                <div key={g.id} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, borderLeft: `5px solid ${sideInfo.color}`, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: C.sub, width: 18 }}>{i + 1}</span>
+                    <GuestField g={g} col={GUEST_COLS[0]} side={side} updateGuest={updateGuest} style={{ fontSize: 14, fontWeight: 700 }} />
+                    <button onClick={() => confirmRemove(g)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 14, opacity: .7 }}>✕</button>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+                    {GUEST_COLS.filter(c => c.cycle).map(c => (
+                      <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.sub, fontWeight: 700 }}>{c.label}<GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></span>
+                    ))}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 10px", alignItems: "center" }}>
+                    {GUEST_COLS.slice(1).filter(c => !c.cycle).map(c => (
+                      <Fragment key={c.key}>
+                        <span style={{ fontSize: 11, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{c.label}</span>
+                        <div><GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></div>
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead>
+                <tr>
+                  <th style={{ ...th, width: 36, cursor: "default" }}>번호</th>
+                  {GUEST_COLS.map(c => <th key={c.key} onClick={() => handleSort(c.key)} title="눌러서 정렬" style={{ ...th, minWidth: c.w }}>{c.label}<span style={{ opacity: sort.key === c.key ? 1 : .55 }}>{sortMark(c.key)}</span></th>)}
+                  <th style={{ ...th, width: 30, cursor: "default" }} />
+                </tr>
+              </thead>
+              <tbody>
+                {guests.map((g, i) => (
+                  <tr key={g.id} style={{ borderBottom: `1px solid ${C.pink1}` }}>
+                    <td style={{ textAlign: "center", fontSize: 11, color: C.sub }}>{i + 1}</td>
+                    {GUEST_COLS.map(c => <td key={c.key} style={{ padding: "5px 4px", textAlign: c.cycle ? "center" : "left" }}><GuestField g={g} col={c} side={side} updateGuest={updateGuest} /></td>)}
+                    <td style={{ textAlign: "center" }}><button onClick={() => confirmRemove(g)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {guests.length === 0 && <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: C.sub }}>아직 {sideInfo.label} 하객이 없어요. 아래 버튼으로 한 줄씩 추가해봐요 {sideInfo.emoji}</div>}
+        <button onClick={() => addGuest(side)} style={{ marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 10, border: `1.5px dashed ${sideInfo.color}`, background: "transparent", color: sideInfo.color, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>＋ {sideInfo.label} 하객 추가</button>
+        <div style={{ marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" }}>
+          💡 유형·참석·식사 칸은 누를 때마다 바뀌어요 (빈칸 → 모청/O → 종이/X → 빈칸).<br />
+          📊 요약표는 이름을 적은 하객만 세요. 청첩장모임 인원은 모임 날짜를 적은 하객 수예요.
+        </div>
+    </>
+  );
+}
+
+// Firebase는 빈 배열을 저장하지 않아서, 없으면 빈 목록으로 읽어요
+function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : []; }
+const smallInp = { width: "100%", minWidth: 0, boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: "none", background: "#FFF8FA", color: C.text, padding: "6px 8px", fontFamily: "inherit" };
+const dashedAddBtn = { width: "100%", padding: "9px 0", borderRadius: 10, border: `1.5px dashed ${C.rose}`, background: "transparent", color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" };
+const tipBox = { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.7, background: C.pink1, borderRadius: 10, padding: "8px 12px" };
+// 단계·분류 이름도 직접 추가·수정·삭제할 수 있어요. 한 번도 안 고쳤으면 기본 목록을 써요.
+function sectionsOf(wedding, field, defaults) {
+  const list = asList(wedding[field]);
+  return list.length ? list : defaults;
+}
+function moveInList(list, i, dir) {
+  const k = i + dir;
+  if (i < 0 || k < 0 || k >= list.length) return list;
+  const next = [...list];
+  [next[i], next[k]] = [next[k], next[i]];
+  return next;
+}
+const iconBtn = { background: "none", border: "none", cursor: "pointer", color: C.sub, fontSize: 13, padding: "2px 4px", flexShrink: 0 };
+// 편집 모드에서 단계·분류 제목 줄: 이름 고치기 · 위아래 옮기기 · 지우기
+function SectionEditHead({ id, label, onRename, onMove, onRemove, first, last }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
+      <KoreanInput key={"sec-" + id} value={label} onChange={onRename} style={{ ...smallInp, flex: 1, fontWeight: 800, background: C.white }} />
+      <button onClick={() => onMove(-1)} disabled={first} style={{ ...iconBtn, opacity: first ? .25 : .8 }}>↑</button>
+      <button onClick={() => onMove(1)} disabled={last} style={{ ...iconBtn, opacity: last ? .25 : .8 }}>↓</button>
+      <button onClick={onRemove} title="이 묶음 지우기" style={{ ...iconBtn, color: C.tomato }}>🗑️</button>
+    </div>
+  );
+}
+function editBtn(on) { return { padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", color: C.white, fontWeight: 800, fontSize: 13, background: on ? C.green : C.rose, flexShrink: 0 }; }
+
+// ✅ 준비할 것: 중요한 순서대로 15단계로 묶은 체크리스트. 처음엔 비어 있고, 기본 목록을 불러온 뒤 고쳐 쓰면 돼요.
+const TASK_STAGES = [
+  { key: "s01", label: "01 예산과 결혼 방향 정하기", items: ["결혼 희망 시기 정하기", "총예산 정하기 (예식·신혼집·신혼여행 포함)", "양가 지원 가능 금액 확인 및 자금 계획 세우기", "항목별 예산표 만들기", "예식 스타일 정하기 (웨딩홀, 스몰웨딩, 야외, 종교 예식 등)", "예비비 10% 정도 따로 잡아두기"] },
+  { key: "s02", label: "02 예식장 계약", items: ["희망 지역, 날짜, 시간대, 하객 규모 정하기", "예식장 3곳 이상 투어 및 견적 비교", "대관료, 식대, 보증 인원, 최소 인원 확인", "포함 내역 확인 (폐백실, 신부대기실, 주차, 연회장 등)", "계약금, 잔금 일정, 환불·위약금 규정 확인", "계약서 작성"] },
+  { key: "s03", label: "03 신혼집 구하기", items: ["주거 형태 정하기 (전세, 월세, 매매)", "대출 가능 여부와 한도 확인 (신혼부부 전용 대출 포함)", "지역 및 출퇴근 동선 정하기", "집 보기 및 계약", "등기부등본, 보증보험 등 권리관계 확인", "입주일, 이사 일정 확정"] },
+  { key: "s04", label: "04 양가 인사와 상견례", items: ["양가 부모님께 결혼 의사 전달 및 인사", "상견례 날짜 조율 및 장소 예약 (조용한 룸이 있는 곳)", "사전 조율 주제 정리 (예식 시기, 예단·예물 범위, 혼수, 신혼집, 폐백)", "상견례 당일 식사비 부담 주체 정하기", "상견례 후 양가에 감사 인사"] },
+  { key: "s05", label: "05 스드메 (스튜디오·드레스·메이크업)", items: ["웨딩플래너 이용 여부 결정 (직접 진행, 플래너, 패키지)", "스튜디오 비교 및 계약 (앨범 구성, 원본 제공 여부, 촬영 컨셉)", "드레스샵 투어 및 피팅 (촬영용·본식용 드레스, 신랑 예복)", "메이크업·헤어샵 선정 (리허설, 본식 당일 출장 여부)", "추가금 항목 사전 확인 (원본 추가, 피팅비, 헬퍼 비용, 지정 비용, 드레스 업그레이드)", "계약서의 환불·변경 규정 확인"] },
+  { key: "s06", label: "06 예물·예단", items: ["예물 범위와 예산 양가 합의 (반지, 시계, 목걸이, 가방 등)", "결혼반지 구입", "예단·이바지 범위 협의 (간소화 또는 생략도 가능)", "함 진행 여부 결정", "현금, 물품 등 전달 방식과 시기 정하기"] },
+  { key: "s07", label: "07 혼주 준비 (한복·메이크업)", items: ["혼주 한복 대여 또는 맞춤 결정 (신랑 어머님, 신부 어머님)", "한복 색상 조율 (양가 어머님 한복이 서로 어울리는지)", "아버님 예복 준비 (양복 또는 한복)", "혼주 메이크업·헤어 예약", "한복 피팅 일정 및 대여·반납일 확인"] },
+  { key: "s08", label: "08 신혼여행", items: ["여행지, 기간, 예산 정하기", "항공권·숙소 예약 (성수기는 일찍 마감)", "여권 유효기간 확인 (6개월 이상) 및 필요 시 재발급", "비자, 입국 서류, 여행자보험 확인", "환전 및 현지 일정 계획"] },
+  { key: "s09", label: "09 혼수 (가전·가구)", items: ["혼수 예산과 품목 정하기", "가전 목록 (냉장고, 세탁기, 건조기, TV, 에어컨, 청소기 등)", "가구 목록 (침대, 소파, 식탁, 옷장, 수납장 등)", "주방용품, 침구, 생활용품 목록 작성", "구매 및 배송·설치 일정을 입주일에 맞춰 조율", "양가 중복 구매 방지를 위해 품목 공유"] },
+  { key: "s10", label: "10 청첩장과 하객 관리", items: ["하객 명단 정리 (양가, 지인, 직장)", "예식장 보증 인원과 맞춰 인원 조정", "청첩장 디자인 선택 및 제작 (모바일 청첩장 병행)", "청첩장 전달 (예식 2~4주 전 시작)", "식권 수량 및 좌석 배치 확인"] },
+  { key: "s11", label: "11 예식 구성 요소", items: ["사회자 섭외", "축가·연주 섭외", "주례 또는 성혼선언문 낭독자 정하기", "식전 영상, 웰컴보드, 포토테이블 준비", "부케·부토니에 준비", "본식 스냅·영상 업체 계약 (선택)", "폐백 여부 결정 및 준비", "답례품 준비"] },
+  { key: "s12", label: "12 법적·행정 절차", items: ["혼인신고 시기 결정 (예식 전 또는 후)", "혼인신고 서류 준비 (가족관계증명서, 혼인관계증명서 등)", "주소 이전과 전입신고 일정 확인", "보험, 통장, 카드 등 명의·주소 변경 목록 정리", "신혼부부 혜택 (대출, 청약 등) 확인"] },
+  { key: "s13", label: "13 본인 관리", items: ["피부·바디 관리, 체중 관리", "웨딩 슈즈, 속옷, 액세서리 준비", "신랑 예복 수선 및 구두 준비", "건강검진 (선택)"] },
+  { key: "s14", label: "14 결혼식 직전 점검", items: ["모든 업체 일정과 시간 재확인", "예식장 최종 점검 (식순, 음악, 좌석, 식사)", "잔금 정리 및 사례비 준비 (헬퍼, 기사님 등)", "축의금 접수 담당자 지정", "사회자·축가자와 최종 점검", "당일 비상 키트 준비 (반창고, 핀, 손거울, 간식, 보조배터리)", "전날 충분히 쉬기"] },
+  { key: "s15", label: "15 결혼식 후", items: ["축의금 정산", "하객과 도움 주신 분들께 감사 인사", "앨범·영상 수령 확인", "양가 부모님께 인사 및 선물", "혼인신고 마무리 (아직 안 했다면)"] },
+];
+const TASK_DEFAULT_SECTIONS = TASK_STAGES.map(({ key, label }) => ({ key, label }));
+const ORPHAN = { key: "_none", label: "분류 없음" };
+function TaskView({ isMobile, wedding, setWedding }) {
+  const [editMode, setEditMode] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
+  const tasks = asList(wedding.tasks);
+  const done = tasks.filter(t => t.done).length;
+  const pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
+  const upd = fn => setWedding(p => ({ ...p, tasks: fn(asList(p.tasks)) }));
+  const setTask = (id, patch) => upd(list => list.map(t => t.id === id ? { ...t, ...patch } : t));
+  const stages = sectionsOf(wedding, "taskStages", TASK_DEFAULT_SECTIONS);
+  const known = new Set(stages.map(s => s.key));
+  const stageOf = t => known.has(t.stage) ? t.stage : ORPHAN.key;
+  const hasOrphan = tasks.some(t => !known.has(t.stage));
+  const updStages = fn => setWedding(p => ({ ...p, taskStages: fn(sectionsOf(p, "taskStages", TASK_DEFAULT_SECTIONS)) }));
+
+  // 기본 목록을 불러올 때, 지워버린 기본 단계가 있으면 다시 만들어줘요
+  function loadTemplate() {
+    setWedding(p => {
+      const cur = sectionsOf(p, "taskStages", TASK_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(s => s.key));
+      return {
+        ...p,
+        taskStages: [...cur, ...TASK_DEFAULT_SECTIONS.filter(s => !have.has(s.key))],
+        tasks: [...asList(p.tasks), ...TASK_STAGES.flatMap(s => s.items.map(title => ({ id: genId(), stage: s.key, title, done: false, due: "" })))],
+      };
+    });
+  }
+  function addStage() {
+    const key = "st_" + genId();
+    updStages(list => [...list, { key, label: "새 단계" }]);
+    upd(list => [...list, { id: genId(), stage: key, title: "새 할 일", done: false, due: "" }]);
+  }
+  function removeStage(s) {
+    const n = tasks.filter(t => t.stage === s.key).length;
+    if (stages.length <= 1) { window.alert("단계는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${s.label}' 단계를 지울까요?${n ? ` 안에 있는 할 일 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updStages(list => list.filter(x => x.key !== s.key));
+    upd(list => list.filter(t => t.stage !== s.key));
+  }
+  // 같은 단계 안에서 위아래로 옮겨요
+  function moveTask(t, dir) {
+    upd(list => {
+      const same = list.filter(x => stageOf(x) === stageOf(t));
+      const j = same.findIndex(x => x.id === t.id) + dir;
+      if (j < 0 || j >= same.length) return list;
+      return moveInList(list, list.findIndex(x => x.id === t.id), list.findIndex(x => x.id === same[j].id) - list.findIndex(x => x.id === t.id));
+    });
+  }
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.white, borderRadius: 16, padding: "12px 16px", border: `1.5px solid ${C.border}`, marginBottom: 12, boxShadow: `0 2px 10px ${C.pink1}` }}>
+        <Ring pct={pct} size={52} stroke={6} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>✅ 결혼 준비 진행률</div>
+          <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 2 }}>{tasks.length ? `${done}/${tasks.length}개 완료 · 위에서부터 차례대로` : "아직 준비 목록이 없어요"}</div>
+        </div>
+        {!editMode && tasks.length > 0 && <button onClick={() => setHideDone(p => !p)} style={{ padding: "5px 10px", borderRadius: 99, border: `1.5px solid ${hideDone ? C.rose : C.border}`, background: hideDone ? C.rose + "18" : C.white, color: hideDone ? C.rose : C.sub, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>{hideDone ? "완료 숨김" : "완료 숨기기"}</button>}
+        <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "편집"}</button>
+      </div>
+
+      {tasks.length === 0 && !editMode && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>중요한 순서대로 정리된 15단계 준비 목록을 불러와서 우리한테 맞게 고쳐 써봐요 💍</div>
+          <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 준비 목록 불러오기</button>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <b>편집</b>을 눌러요</div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+        {[...stages, ...(hasOrphan ? [ORPHAN] : [])].map((s, si) => {
+          const items = tasks.filter(t => stageOf(t) === s.key);
+          if (items.length === 0 && !editMode) return null;
+          const shown = hideDone && !editMode ? items.filter(t => !t.done) : items;
+          const sDone = items.filter(t => t.done).length;
+          const allDone = items.length > 0 && sDone === items.length;
+          return (
+            <div key={s.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${allDone ? "#9ED4B4" : C.border}`, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: allDone ? "#E9F6EE" : "#FFF3F1", borderBottom: `1px solid ${C.border}` }}>
+                {editMode && s.key !== ORPHAN.key ? (
+                  <SectionEditHead id={s.key} label={s.label} first={si === 0} last={si === stages.length - 1}
+                    onRename={v => updStages(list => list.map(x => x.key === s.key ? { ...x, label: v } : x))}
+                    onMove={dir => updStages(list => moveInList(list, si, dir))}
+                    onRemove={() => removeStage(s)} />
+                ) : (
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 900, color: allDone ? "#2E8B57" : C.rose }}>{s.label}</span>
+                )}
+                <span style={{ fontSize: 11, fontWeight: 800, color: allDone ? "#4CAF84" : C.sub }}>{allDone ? "✓ " : ""}{sDone}/{items.length}</span>
+              </div>
+              <div style={{ padding: "6px 10px" }}>
+                {shown.map((t, ti) => editMode ? (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0", flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                    <KoreanInput key={"task-" + t.id} value={t.title} onChange={v => setTask(t.id, { title: v })} style={{ ...smallInp, flex: 1, minWidth: isMobile ? "100%" : 0 }} />
+                    <input type="date" value={t.due || ""} onChange={e => setTask(t.id, { due: e.target.value })} title="언제까지" style={{ ...smallInp, width: 130, flex: "none" }} />
+                    <select value={stageOf(t)} onChange={e => setTask(t.id, { stage: e.target.value })} title="다른 단계로 옮기기" style={{ ...smallInp, width: isMobile ? 90 : 110, flex: "none" }}>
+                      {stages.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+                      {stageOf(t) === ORPHAN.key && <option value={ORPHAN.key}>{ORPHAN.label}</option>}
+                    </select>
+                    <button onClick={() => moveTask(t, -1)} disabled={ti === 0} style={{ ...iconBtn, opacity: ti === 0 ? .25 : .8 }}>↑</button>
+                    <button onClick={() => moveTask(t, 1)} disabled={ti === shown.length - 1} style={{ ...iconBtn, opacity: ti === shown.length - 1 ? .25 : .8 }}>↓</button>
+                    <button onClick={() => upd(list => list.filter(x => x.id !== t.id))} style={{ ...iconBtn, color: C.tomato }}>✕</button>
+                  </div>
+                ) : (
+                  <div key={t.id} onClick={() => setTask(t.id, { done: !t.done })} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 2px", borderBottom: `1px dashed ${C.pink1}`, cursor: "pointer", userSelect: "none" }}>
+                    <WeeklyCheckbox checked={!!t.done} onToggle={() => {}} />
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: t.done ? 500 : 700, color: t.done ? C.sub : C.text, textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
+                    {t.due && <span style={{ fontSize: 11, fontWeight: 700, color: !t.done && t.due < todayStr ? C.tomato : C.sub, flexShrink: 0 }}>~{t.due.slice(5).replace("-", "/")}</span>}
+                  </div>
+                ))}
+                {!editMode && hideDone && items.length > 0 && shown.length === 0 && <div style={{ fontSize: 12, color: "#4CAF84", fontWeight: 700, padding: "8px 2px" }}>🎉 이 단계 준비 끝!</div>}
+                {editMode && s.key !== ORPHAN.key && <button onClick={() => upd(list => [...list, { id: genId(), stage: s.key, title: "새 할 일", done: false, due: "" }])} style={{ ...dashedAddBtn, marginTop: 6, padding: "6px 0" }}>＋ 할 일 추가</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {editMode && <button onClick={addStage} style={{ ...dashedAddBtn, marginTop: 12 }}>＋ 새 단계 추가</button>}
+      {editMode && (
+        <div style={tipBox}>
+          ✏️ 단계 이름과 할 일을 바로 고칠 수 있어요. ↑↓로 순서를 바꾸고, 할 일 옆 목록으로 다른 단계로 옮겨요.<br />
+          📅 날짜를 넣으면 "~11/30"처럼 마감일이 보여요. 지난 마감일은 빨갛게 보여요.<br />
+          🧹 스몰웨딩·종교 예식처럼 우리랑 상관없는 항목은 ✕로 지워서 쓰세요.<br />
+          {tasks.length > 0 && <>📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 목록 한 번 더 불러오기</span> (지금 목록 뒤에 덧붙여져요)</>}
+        </div>
+      )}
+      {tasks.length > 0 && !editMode && (
+        <div style={{ ...tipBox, marginTop: 14 }}>
+          <b>📌 꼭 기억하기</b><br />
+          · 환불 규정, 추가금 항목, 포함 내역은 반드시 계약서로 확인해요.<br />
+          · 예단, 예물, 혼주 한복처럼 의견이 갈리기 쉬운 건 초반에 양가 합의해요.<br />
+          · 봄·가을 주말 예식장과 신혼여행 항공권은 빨리 마감돼요.
+        </div>
+      )}
+    </>
+  );
+}
+
+// 💰 예산표: 대분류별로 항목을 적고, 금액을 신랑·신부가 얼마씩 내는지 나눠 적어요.
+const BUDGET_GROUPS = [
+  { key: "meet",    label: "상견례",    color: "#F4B6C2", items: ["신랑측 부모님 선물", "신부측 부모님 선물", "식사"] },
+  { key: "hall",    label: "웨딩홀",    color: "#FFD27F", items: ["예약금", "대관료", "꽃장식", "신랑측 식대", "신부측 식대"] },
+  { key: "sdm",     label: "스드메",    color: "#FFE7A3", items: ["스튜디오", "드레스", "메이크업", "플래닝비", "헬퍼비", "헤어변형", "촬영 소품·간식"] },
+  { key: "main",    label: "본식",      color: "#B9E3C6", items: ["신랑 예복", "혼주 메이크업", "혼주 한복", "아버님 예복", "부케·부토니에", "본식 스냅·영상", "사회자·축가 사례"] },
+  { key: "jewelry", label: "예물·예단", color: "#D9C8F0", items: ["웨딩밴드", "프로포즈 반지", "예단"] },
+  { key: "honey",   label: "신혼여행",  color: "#B7D7F2", items: ["항공권", "숙소", "환전", "여행 경비", "쇼핑"] },
+  { key: "etc",     label: "기타",      color: "#E3DAD7", items: ["종이 청첩장", "모바일 청첩장", "답례품"] },
+];
+const BUDGET_COLS = [
+  { key: "item",   label: "항목",   w: 120 },
+  { key: "detail", label: "내용",   w: 170 },
+  { key: "plan",   label: "예산",   w: 100, num: true },
+  { key: "cost",   label: "금액",   w: 100, num: true },
+  { key: "groom",  label: "💙 신랑", w: 100, num: true },
+  { key: "bride",  label: "🩷 신부", w: 100, num: true },
+  { key: "paid",   label: "낸 돈",  w: 100, num: true },
+  { key: "memo",   label: "메모",   w: 140 },
+];
+const BUDGET_DEFAULT_SECTIONS = BUDGET_GROUPS.map(({ key, label, color }) => ({ key, label, color }));
+const SECTION_COLORS = ["#F4B6C2", "#FFD27F", "#FFE7A3", "#B9E3C6", "#D9C8F0", "#B7D7F2", "#E3DAD7", "#FFC8A8"];
+// 호갱 vs 실속: 릴스에서 본 결혼비용 차이 포인트
+const BUDGET_TIPS = [
+  ["풀패키지 (스드메+웨딩홀 2000만원)", "필요한 것만 선택계약"],
+  ["앨범 추가 (추가금 300만원~)", "기본앨범 + 원본"],
+  ["맞춤 예복 (브랜드 300만원~)", "기성복 (50만원~)"],
+  ["제시한 보증인원 그대로", "최소 보증인원으로 협상"],
+  ["혼주 한복 맞춤 (양가 300만원~)", "혼주 한복 대여 (양가 80만원~)"],
+  ["서브스냅 추가 (100만원~)", "본식 스냅만 (계약 포함)"],
+];
+function BudgetView({ isMobile, wedding, setWedding }) {
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const budget = wedding.budget || {};
+  const items = asList(budget.items);
+  const groups = sectionsOf(wedding, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
+  const groupKeys = new Set(groups.map(g => g.key));
+  const groupOf = it => groupKeys.has(it.group) ? it.group : ORPHAN.key;
+  const shownGroups = [...groups, ...(items.some(it => !groupKeys.has(it.group)) ? [{ ...ORPHAN, color: "#E3DAD7" }] : [])];
+  const upd = fn => setWedding(p => ({ ...p, budget: fn({ ...(p.budget || {}), items: asList(p.budget && p.budget.items) }) }));
+  const updGroups = fn => setWedding(p => ({ ...p, budgetGroups: fn(sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS)) }));
+  function loadTemplate() {
+    setWedding(p => {
+      const cur = sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(g => g.key));
+      const b = p.budget || {};
+      return { ...p, budgetGroups: [...cur, ...BUDGET_DEFAULT_SECTIONS.filter(g => !have.has(g.key))], budget: { ...b, items: [...asList(b.items), ...BUDGET_GROUPS.flatMap(g => g.items.map(name => newItem(g.key, name)))] } };
+    });
+  }
+  function addGroup() {
+    const key = "bg_" + genId();
+    updGroups(list => [...list, { key, label: "새 분류", color: SECTION_COLORS[list.length % SECTION_COLORS.length] }]);
+    upd(b => ({ ...b, items: [...b.items, newItem(key)] }));
+  }
+  function removeGroup(g) {
+    const n = items.filter(it => it.group === g.key).length;
+    if (groups.length <= 1) { window.alert("분류는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${g.label}' 분류를 지울까요?${n ? ` 안에 있는 항목 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updGroups(list => list.filter(x => x.key !== g.key));
+    upd(b => ({ ...b, items: b.items.filter(it => it.group !== g.key) }));
+  }
+  // 같은 분류 안에서 위아래로 옮겨요
+  function moveItem(it, dir) {
+    upd(b => {
+      const same = b.items.filter(x => groupOf(x) === groupOf(it));
+      const j = same.findIndex(x => x.id === it.id) + dir;
+      if (j < 0 || j >= same.length) return b;
+      const i = b.items.findIndex(x => x.id === it.id);
+      return { ...b, items: moveInList(b.items, i, b.items.findIndex(x => x.id === same[j].id) - i) };
+    });
+  }
+  // 편집 모드에서 항목 옆에 나오는 분류 옮기기·순서 버튼
+  const itemTools = (it, idx, len) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+      <select value={groupOf(it)} onChange={e => setItem(it.id, "group", e.target.value)} title="다른 분류로 옮기기" style={{ ...smallInp, width: 88, padding: "4px 4px" }}>
+        {groups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+        {groupOf(it) === ORPHAN.key && <option value={ORPHAN.key}>{ORPHAN.label}</option>}
+      </select>
+      <button onClick={() => moveItem(it, -1)} disabled={idx === 0} style={{ ...iconBtn, opacity: idx === 0 ? .25 : .8 }}>↑</button>
+      <button onClick={() => moveItem(it, 1)} disabled={idx === len - 1} style={{ ...iconBtn, opacity: idx === len - 1 ? .25 : .8 }}>↓</button>
+    </span>
+  );
+  const setItem = (id, key, v) => upd(b => ({ ...b, items: b.items.map(it => it.id === id ? { ...it, [key]: v } : it) }));
+  const newItem = (group, item = "") => ({ id: genId(), group, item, detail: "", plan: "", cost: "", groom: "", bride: "", paid: "", memo: "" });
+  function removeItem(it) {
+    if (window.confirm(`${it.item || "이"} 항목을 지울까요?`)) upd(b => ({ ...b, items: b.items.filter(x => x.id !== it.id) }));
+  }
+
+  const sum = (list, k) => list.reduce((s, it) => s + toWon(it[k]), 0);
+  const rest = it => Math.max(0, toWon(it.cost) - toWon(it.paid));
+  // 신랑+신부로 나눈 돈이 금액과 다르면 알려줘요 (둘 다 비어 있으면 아직 안 나눈 걸로 봐요)
+  const splitGap = it => (it.groom || it.bride) ? toWon(it.cost) - toWon(it.groom) - toWon(it.bride) : 0;
+  const cost = sum(items, "cost"), groom = sum(items, "groom"), bride = sum(items, "bride");
+  const unassigned = items.reduce((s, it) => s + (it.groom || it.bride ? 0 : toWon(it.cost)), 0);
+  const balance = items.reduce((s, it) => s + rest(it), 0);
+  // 예상 지출: 금액이 정해진 항목은 금액, 아직이면 예산으로 쳐요
+  const expected = items.reduce((s, it) => s + (toWon(it.cost) || toWon(it.plan)), 0);
+  const total = toWon(budget.total);
+  const left = total - expected;
+
+  const card = (label, value, color = C.text, sub) => (
+    <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color, marginTop: 2 }}>{fmtWon(value)}원</div>
+      {sub && <div style={{ fontSize: 10, color: C.sub, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+  const field = (it, c, style) => <KoreanInput key={c.key + "-" + it.id} value={it[c.key] || ""} inputMode={c.num ? "numeric" : undefined} placeholder={c.num ? "0" : ""} onChange={v => setItem(it.id, c.key, c.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...smallInp, textAlign: c.num ? "right" : "left", ...style }} />;
+  const gapNote = it => { const g = splitGap(it); return g ? <span style={{ fontSize: 10, color: "#C98A00", fontWeight: 700 }}>⚠️ 나눈 돈이 금액보다 {fmtWon(Math.abs(g))}원 {g > 0 ? "적어요" : "많아요"}</span> : null; };
+  const th = { padding: "7px 6px", fontSize: 12, fontWeight: 800, color: C.text, whiteSpace: "nowrap", borderBottom: `1px solid ${C.border}` };
+  const numTd = { padding: "6px 8px", textAlign: "right", fontSize: 13, fontWeight: 900, whiteSpace: "nowrap" };
+
+  return (
+    <>
+      <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, padding: "12px 14px", marginBottom: 10, boxShadow: `0 2px 10px ${C.pink1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>💰 총 예산</span>
+        <KoreanInput key="budget-total" value={budget.total || ""} inputMode="numeric" placeholder="예) 30000000" onChange={v => setWedding(p => ({ ...p, budget: { ...(p.budget || {}), total: v.replace(/[^\d]/g, "") } }))} style={{ ...smallInp, width: 150, textAlign: "right", fontSize: 14, fontWeight: 800 }} />
+        <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{total > 0 ? `${fmtWon(total)}원` : "원"}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 8, marginBottom: 14 }}>
+        {card("지금까지 결혼비용", cost, C.rose, unassigned ? `아직 안 나눈 돈 ${fmtWon(unassigned)}원` : "금액 칸 합계")}
+        {card("💙 신랑 총 결혼비용", groom)}
+        {card("🩷 신부 총 결혼비용", bride)}
+        {card("남은 잔금", balance, C.tomato, "금액 − 낸 돈")}
+        {card(left >= 0 ? "총 예산 대비 여유" : "총 예산 초과", Math.abs(left), left >= 0 ? "#4CAF84" : C.tomato, total ? "금액이 없는 항목은 예산으로 계산" : "위에 총 예산을 적어주세요")}
+      </div>
+
+      <div style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, marginBottom: 14, overflow: "hidden" }}>
+        <div onClick={() => setTipsOpen(p => !p)} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 900, color: C.rose, cursor: "pointer", display: "flex" }}>
+          <span style={{ flex: 1 }}>💡 결혼비용 한끗차이: 호갱 vs 실속</span><span style={{ color: C.sub }}>{tipsOpen ? "접기 ▲" : "펼치기 ▼"}</span>
+        </div>
+        {tipsOpen && (
+          <div style={{ padding: "0 14px 12px", maxWidth: 760, display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "6px 8px", fontSize: 12, alignItems: "center" }}>
+            <b style={{ color: C.tomato }}>😵 호갱</b><span /><b style={{ color: "#2E8B57" }}>😎 실속</b>
+            {BUDGET_TIPS.map(([a, b]) => (
+              <Fragment key={a}><span style={{ color: C.sub }}>{a}</span><span style={{ color: C.pink2 }}>→</span><span style={{ fontWeight: 700 }}>{b}</span></Fragment>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {items.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "분류 편집"}</button>
+        </div>
+      )}
+      {items.length === 0 && !editMode && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>상견례부터 신혼여행까지 자주 쓰는 항목을 불러와서 금액만 채워봐요 💰</div>
+          <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 항목 불러오기</button>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <span onClick={() => setEditMode(true)} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>분류 편집</span>을 눌러요</div>
+        </div>
+      )}
+
+      {(items.length > 0 || editMode) && shownGroups.map((g, gi) => {
+        const list = items.filter(it => groupOf(it) === g.key);
+        if (!editMode && list.length === 0) return null;
+        const gCost = sum(list, "cost"), gGroom = sum(list, "groom"), gBride = sum(list, "bride");
+        return (
+          <div key={g.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, marginBottom: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: g.color + "66", flexWrap: "wrap" }}>
+              {editMode && g.key !== ORPHAN.key ? (
+                <SectionEditHead id={g.key} label={g.label} first={gi === 0} last={gi === groups.length - 1}
+                  onRename={v => updGroups(l => l.map(x => x.key === g.key ? { ...x, label: v } : x))}
+                  onMove={dir => updGroups(l => moveInList(l, gi, dir))}
+                  onRemove={() => removeGroup(g)} />
+              ) : (
+                <span style={{ fontSize: 14, fontWeight: 900, color: C.text, flex: 1 }}>{g.label}</span>
+              )}
+              <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>총 {fmtWon(gCost)}원</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>💙 {fmtWon(gGroom)} · 🩷 {fmtWon(gBride)}</span>
+            </div>
+            {isMobile ? (
+              <div style={{ padding: "6px 10px" }}>
+                {list.map((it, ii) => (
+                  <div key={it.id} style={{ borderBottom: `1px dashed ${C.border}`, padding: "8px 0" }}>
+                    {editMode && <div style={{ marginBottom: 6 }}>{itemTools(it, ii, list.length)}</div>}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                      {field(it, BUDGET_COLS[0], { fontWeight: 800, width: 110, flex: "none" })}
+                      {field(it, BUDGET_COLS[1], { flex: 1 })}
+                      <button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 14, opacity: .7 }}>✕</button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      {BUDGET_COLS.slice(2, 7).map(c => (
+                        <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.sub, fontWeight: 700 }}>
+                          <span style={{ width: 40, flexShrink: 0 }}>{c.label}</span>{field(it, c)}
+                        </label>
+                      ))}
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.sub, fontWeight: 700 }}>
+                        <span style={{ width: 40 }}>잔금</span><span style={{ fontSize: 13, fontWeight: 800, color: rest(it) ? C.tomato : C.sub }}>{fmtWon(rest(it))}원</span>
+                      </span>
+                    </div>
+                    {field(it, BUDGET_COLS[7], { marginTop: 6 })}
+                    {gapNote(it)}
+                  </div>
+                ))}
+                {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, margin: "8px 0 4px", padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      {BUDGET_COLS.slice(0, 7).map(c => <th key={c.key} style={{ ...th, minWidth: c.w }}>{c.label}</th>)}
+                      <th style={{ ...th, minWidth: 90 }}>잔금</th>
+                      <th style={{ ...th, minWidth: BUDGET_COLS[7].w }}>메모</th>
+                      <th style={{ ...th, width: 30 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((it, ii) => (
+                      <Fragment key={it.id}>
+                        <tr>
+                          {BUDGET_COLS.slice(0, 7).map(c => <td key={c.key} style={{ padding: "4px 3px" }}>{field(it, c, c.key === "item" ? { fontWeight: 800 } : undefined)}</td>)}
+                          <td style={{ ...numTd, fontWeight: 800, color: rest(it) ? C.tomato : C.sub }}>{fmtWon(rest(it))}원</td>
+                          <td style={{ padding: "4px 3px" }}>{field(it, BUDGET_COLS[7])}</td>
+                          <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>{editMode && itemTools(it, ii, list.length)}<button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
+                        </tr>
+                        {splitGap(it) !== 0 && <tr><td /><td colSpan={9} style={{ padding: "0 4px 4px" }}>{gapNote(it)}</td></tr>}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ padding: "6px 10px 10px" }}>
+                  {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {editMode && (
+        <>
+          <button onClick={addGroup} style={{ ...dashedAddBtn, marginBottom: 12 }}>＋ 새 분류 추가</button>
+          <div style={{ ...tipBox, marginTop: 0, marginBottom: 12 }}>
+            ✏️ 분류 이름을 고치고 ↑↓로 순서를 바꿀 수 있어요. 🗑️를 누르면 그 분류와 안의 항목이 같이 지워져요.<br />
+            🔀 항목 옆 목록으로 다른 분류로 옮기고, ↑↓로 순서를 바꿔요.
+            {items.length > 0 && <><br />📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 항목 한 번 더 불러오기</span> (지금 항목 뒤에 덧붙여져요)</>}
+          </div>
+        </>
+      )}
+      {items.length > 0 && (
+        <div style={{ background: "#3A3A3A", color: C.white, borderRadius: 14, padding: "12px 16px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 6, fontSize: 14, fontWeight: 800 }}>
+          <span>💙 신랑 총결혼비용 {fmtWon(groom)}원</span>
+          <span>🩷 신부 총결혼비용 {fmtWon(bride)}원</span>
+          <span>💍 총 결혼비용 {fmtWon(cost)}원</span>
+        </div>
+      )}
+      <div style={tipBox}>
+        💡 <b>예산</b>은 쓰기로 마음먹은 돈, <b>금액</b>은 실제로 계약하거나 쓴 돈이에요. 금액을 💙신랑·🩷신부 칸에 누가 얼마씩 내는지 나눠 적어요.<br />
+        🧾 <b>낸 돈</b>은 계약금처럼 이미 보낸 돈이고, <b>잔금</b> = 금액 − 낸 돈이에요.
+      </div>
+    </>
+  );
+}
+
+// 🏢 업체 관리: 항목마다 미정 → 후보 → 계약완료(또는 안 함)로 진행 상황을 봐요. 돈은 예산표에만 적어요.
+const VENDOR_GROUPS = [
+  { key: "all",  label: "전체" },
+  { key: "hall", label: "웨딩홀" },
+  { key: "sdm",  label: "스드메" },
+  { key: "host", label: "혼주" },
+  { key: "main", label: "본식" },
+  { key: "etc",  label: "기타" },
+];
+const VENDOR_DEFAULT_SECTIONS = VENDOR_GROUPS.slice(1);
+const VENDOR_TEMPLATE = [
+  ["hall", "🏰", "웨딩홀"],
+  ["sdm", "📸", "스튜디오"], ["sdm", "👰", "드레스"], ["sdm", "🤵", "예복"], ["sdm", "💄", "메이크업"], ["sdm", "💇", "헤어 변형"],
+  ["host", "💄", "혼주 메이크업"], ["host", "👘", "혼주 한복"], ["host", "👔", "혼주 정장"],
+  ["main", "📷", "본식 스냅"], ["main", "🎥", "본식 DVD"], ["main", "📱", "아이폰 스냅"], ["main", "🎞️", "서브스냅"], ["main", "🎤", "사회자"], ["main", "🎶", "축가"], ["main", "💐", "부케"], ["main", "🧧", "폐백"],
+  ["etc", "💌", "청첩장"], ["etc", "📲", "모바일 청첩장"], ["etc", "💍", "예물"], ["etc", "🏝️", "허니문"], ["etc", "💰", "축의대"], ["etc", "🤝", "웨딩플래너"],
+];
+const VENDOR_STATUS = [
+  { key: "",     label: "미정",     color: C.sub,     bg: C.white },
+  { key: "cand", label: "후보",     color: "#C98A00", bg: "#FFF6DD" },
+  { key: "done", label: "계약완료", color: "#2E8B57", bg: "#E3F4EA" },
+  { key: "skip", label: "안 함",    color: "#9E9E9E", bg: "#F2F2F2" },
+];
+function VendorView({ isMobile, wedding, setWedding }) {
+  const [group, setGroup] = useState("all");
+  const [openId, setOpenId] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const vendors = asList(wedding.vendors);
+  const upd = fn => setWedding(p => ({ ...p, vendors: fn(asList(p.vendors)) }));
+  const setV = (id, patch) => upd(list => list.map(v => v.id === id ? { ...v, ...patch } : v));
+  const statusOf = v => VENDOR_STATUS.find(s => s.key === (v.status || "")) || VENDOR_STATUS[0];
+  const nextStatus = v => VENDOR_STATUS[(VENDOR_STATUS.indexOf(statusOf(v)) + 1) % VENDOR_STATUS.length].key;
+  const count = k => vendors.filter(v => (v.status || "") === k).length;
+  const groups = sectionsOf(wedding, "vendorGroups", VENDOR_DEFAULT_SECTIONS);
+  const groupKeys = new Set(groups.map(g => g.key));
+  const updGroups = fn => setWedding(p => ({ ...p, vendorGroups: fn(sectionsOf(p, "vendorGroups", VENDOR_DEFAULT_SECTIONS)) }));
+  const curGroup = group === "all" || groupKeys.has(group) ? group : "all";
+  // 안 함은 맨 아래로 내려서 볼 것만 위에 남겨요 (편집할 때는 저장된 순서 그대로)
+  const filtered = vendors.filter(v => curGroup === "all" || v.group === curGroup);
+  const shown = editMode ? filtered : [...filtered].sort((a, b) => (a.status === "skip") - (b.status === "skip"));
+
+  function loadTemplate() {
+    setWedding(p => {
+      const cur = sectionsOf(p, "vendorGroups", VENDOR_DEFAULT_SECTIONS);
+      const have = new Set(cur.map(g => g.key));
+      return {
+        ...p,
+        vendorGroups: [...cur, ...VENDOR_DEFAULT_SECTIONS.filter(g => !have.has(g.key))],
+        vendors: [...asList(p.vendors), ...VENDOR_TEMPLATE.map(([g, emoji, name]) => ({ id: genId(), group: g, emoji, name, status: "", vendor: "", memo: "" }))],
+      };
+    });
+  }
+  function addGroup() {
+    const key = "vg_" + genId();
+    updGroups(list => [...list, { key, label: "새 분류" }]);
+    setGroup(key);
+  }
+  function removeGroup(g) {
+    const n = vendors.filter(v => v.group === g.key).length;
+    if (groups.length <= 1) { window.alert("분류는 하나 이상 있어야 해요."); return; }
+    if (!window.confirm(`'${g.label}' 분류를 지울까요?${n ? ` 안에 있는 업체 항목 ${n}개도 같이 지워져요.` : ""}`)) return;
+    updGroups(list => list.filter(x => x.key !== g.key));
+    upd(list => list.filter(v => v.group !== g.key));
+  }
+  // 지금 보이는 목록 안에서 위아래로 옮겨요
+  function moveVendor(v, dir) {
+    const j = shown.findIndex(x => x.id === v.id) + dir;
+    if (j < 0 || j >= shown.length) return;
+    upd(list => { const i = list.findIndex(x => x.id === v.id); return moveInList(list, i, list.findIndex(x => x.id === shown[j].id) - i); });
+  }
+
+  const stat = (label, n, color) => (
+    <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color, marginTop: 2 }}>{n}곳</div>
+    </div>
+  );
+
+  if (vendors.length === 0 && !editMode) return (
+    <div style={{ textAlign: "center", padding: "30px 0" }}>
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>웨딩홀부터 부케까지 업체를 하나씩 정해 나가는 걸 한눈에 봐요 🏢</div>
+      <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 업체 목록 불러오기</button>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <span onClick={() => setEditMode(true)} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>편집</span>을 눌러요</div>
+    </div>
+  );
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+        {stat("미정", count(""), C.text)}
+        {stat("후보", count("cand"), "#C98A00")}
+        {stat("계약완료", count("done"), "#2E8B57")}
+        {stat("안 함", count("skip"), "#9E9E9E")}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 4, overflowX: "auto", flex: 1 }}>
+          {[VENDOR_GROUPS[0], ...groups].map(g => (
+            <button key={g.key} onClick={() => setGroup(g.key)} style={{ flexShrink: 0, padding: "5px 12px", border: "none", borderBottom: `3px solid ${curGroup === g.key ? C.rose : "transparent"}`, background: "transparent", color: curGroup === g.key ? C.text : C.sub, fontSize: 13, fontWeight: curGroup === g.key ? 900 : 700, cursor: "pointer" }}>{g.label}</button>
+          ))}
+        </div>
+        <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "편집"}</button>
+      </div>
+
+      {editMode && (
+        <div style={{ background: C.white, borderRadius: 14, border: `1.5px dashed ${C.rose}`, padding: "10px 12px", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: C.rose, marginBottom: 6 }}>📂 분류 편집</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 6 }}>
+            {groups.map((g, gi) => (
+              <SectionEditHead key={g.key} id={g.key} label={g.label} first={gi === 0} last={gi === groups.length - 1}
+                onRename={v => updGroups(l => l.map(x => x.key === g.key ? { ...x, label: v } : x))}
+                onMove={dir => updGroups(l => moveInList(l, gi, dir))}
+                onRemove={() => removeGroup(g)} />
+            ))}
+          </div>
+          <button onClick={addGroup} style={{ ...dashedAddBtn, marginTop: 8, padding: "6px 0" }}>＋ 새 분류 추가</button>
+        </div>
+      )}
+
+      <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, overflow: "hidden" }}>
+        {shown.map(v => {
+          const st = statusOf(v);
+          const open = openId === v.id;
+          return (
+            <div key={v.id} style={{ borderBottom: `1px solid ${C.pink1}`, opacity: v.status === "skip" ? .55 : 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px" }}>
+                {editMode ? (
+                  <>
+                    <KoreanInput key={"vemoji-" + v.id} value={v.emoji || ""} onChange={x => setV(v.id, { emoji: x })} style={{ ...smallInp, width: 44, flex: "none", textAlign: "center" }} />
+                    <KoreanInput key={"vname-" + v.id} value={v.name || ""} onChange={x => setV(v.id, { name: x })} style={{ ...smallInp, flex: 1 }} />
+                    <select value={groupKeys.has(v.group) ? v.group : ""} onChange={e => setV(v.id, { group: e.target.value })} style={{ ...smallInp, width: 90, flex: "none" }}>
+                      {!groupKeys.has(v.group) && <option value="">분류 없음</option>}
+                      {groups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+                    </select>
+                    <button onClick={() => moveVendor(v, -1)} style={iconBtn}>↑</button>
+                    <button onClick={() => moveVendor(v, 1)} style={iconBtn}>↓</button>
+                    <button onClick={() => { if (window.confirm(`${v.name || "이"} 항목을 지울까요?`)) upd(list => list.filter(x => x.id !== v.id)); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <div onClick={() => setOpenId(open ? null : v.id)} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>{v.emoji}</span>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: C.text, whiteSpace: "nowrap" }}>{v.name}</span>
+                      <span style={{ fontSize: 13, color: v.vendor ? C.text : C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>: {v.vendor || "미정"}</span>
+                      {v.memo && <span style={{ fontSize: 11, flexShrink: 0 }}>📝</span>}
+                    </div>
+                    <button onClick={() => setV(v.id, { status: nextStatus(v) })} title="눌러서 상태 바꾸기" style={{ flexShrink: 0, minWidth: 66, padding: "4px 10px", borderRadius: 99, border: `1.5px solid ${st.color}55`, background: st.bg, color: st.color, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{st.label}</button>
+                  </>
+                )}
+              </div>
+              {open && !editMode && (
+                <div style={{ padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <KoreanInput key={"vvendor-" + v.id} value={v.vendor || ""} onChange={x => setV(v.id, { vendor: x })} placeholder="업체 이름 (후보면 여러 곳 적어도 돼요)" style={smallInp} />
+                  <KoreanTextarea key={"vmemo-" + v.id} value={v.memo || ""} onChange={x => setV(v.id, { memo: x })} rows={3} placeholder={"후보 비교, 견적, 연락처, 상담 날짜 등\n예) A홀 식대 5.5만 / B홀 식대 6만, 주차 2시간"} style={{ ...smallInp, resize: "vertical", lineHeight: 1.6 }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {shown.length === 0 && <div style={{ textAlign: "center", padding: "20px 0", fontSize: 13, color: C.sub }}>이 분류엔 아직 항목이 없어요</div>}
+      </div>
+      {editMode && <button onClick={() => upd(list => [...list, { id: genId(), group: curGroup === "all" ? groups[groups.length - 1].key : curGroup, emoji: "📌", name: "새 항목", status: "", vendor: "", memo: "" }])} style={{ ...dashedAddBtn, marginTop: 10 }}>＋ 업체 항목 추가</button>}
+      <div style={tipBox}>
+        💡 오른쪽 상태 버튼을 누를 때마다 미정 → 후보 → 계약완료 → 안 함 순서로 바뀌어요. 안 함은 맨 아래로 내려가요.<br />
+        📝 항목 이름을 누르면 업체 이름과 후보 비교 메모를 적을 수 있어요. 계약 금액은 💰 예산 탭에 적어요.
+      </div>
+    </>
+  );
+}
+
+// 🗒️ 결혼 메모: 릴스에서 본 팁, 업체 상담 내용, 캡처 사진을 모아둬요
+function WeddingMemoView({ wedding, setWedding }) {
+  const [text, setText] = useState("");
+  const [img, setImg] = useState(null);
+  const [inputKey, setInputKey] = useState(0);
+  const [search, setSearch] = useState("");
+  const fileRef = useRef(null);
+  const memos = asList(wedding.memos);
+  const upd = fn => setWedding(p => ({ ...p, memos: fn(asList(p.memos)) }));
+  const q = search.trim().toLowerCase();
+  const shown = q ? memos.filter(m => (m.text || "").toLowerCase().includes(q)) : memos;
+
+  function add() {
+    if (!text.trim() && !img) return;
+    upd(list => [{ id: genId(), text: text.trim(), image: img, createdAt: new Date().toISOString() }, ...list]);
+    setText(""); setImg(null); setInputKey(k => k + 1);
+  }
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: C.sub }}>🔍</span>
+        <KoreanInput value={search} onChange={setSearch} placeholder="결혼 메모 검색..." style={{ width: "100%", padding: "9px 12px 9px 34px", border: `1.5px solid ${C.border}`, borderRadius: 12, fontSize: 13, outline: "none", fontFamily: "inherit", background: C.white, color: C.text, boxSizing: "border-box" }} />
+      </div>
+      {img && (
+        <div style={{ position: "relative", display: "inline-block", marginBottom: 10 }}>
+          <img src={img} alt="preview" style={{ maxHeight: 120, borderRadius: 8, border: `1.5px solid ${C.border}` }} />
+          <button onClick={() => setImg(null)} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>✕</button>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, alignItems: "flex-end" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <KoreanTextarea key={"wmemo-" + inputKey} value={text} onChange={setText} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } }} placeholder="릴스에서 본 팁, 상담 내용 등... (Enter로 저장, Shift+Enter 줄바꿈)" rows={3} style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: 14, fontSize: 14, outline: "none", fontFamily: "inherit", background: "#FFF8FA", color: C.text, resize: "none", lineHeight: 1.6, boxSizing: "border-box" }} />
+          <div>
+            <button onClick={() => fileRef.current?.click()} style={{ padding: "6px 12px", borderRadius: 10, background: C.pink1, color: C.rose, border: `1px solid ${C.border}`, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>📷 사진 첨부</button>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) compressImage(f, setImg); e.target.value = ""; }} />
+          </div>
+        </div>
+        <button onClick={add} style={{ padding: "10px 18px", borderRadius: 14, background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, border: "none", fontWeight: 800, fontSize: 14, cursor: "pointer", flexShrink: 0, height: 52 }}>저장</button>
+      </div>
+      {memos.length === 0 && <div style={{ textAlign: "center", padding: "30px 0", color: C.sub, fontSize: 13 }}><div style={{ fontSize: 32, marginBottom: 8 }}>💌</div>릴스 캡처나 상담 메모를 모아봐요!</div>}
+      {memos.length > 0 && shown.length === 0 && <div style={{ textAlign: "center", padding: "30px 0", color: C.sub, fontSize: 13 }}>"{search}"에 대한 검색 결과가 없어요</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {shown.map(m => <MemoCard key={m.id} m={m}
+          editMemo={(id, t, image) => upd(list => list.map(x => x.id === id ? { ...x, text: t, image, updatedAt: new Date().toISOString() } : x))}
+          deleteMemo={id => { if (window.confirm("이 메모를 지울까요?")) upd(list => list.filter(x => x.id !== id)); }} />)}
+      </div>
+    </div>
+  );
+}
+
+// 💍 결혼준비 탭: 하객 · 준비할 것 · 업체 · 예산 · 메모를 위쪽 작은 탭으로 오가요
+const WEDDING_TABS = [
+  { key: "guests",  label: "👥 하객" },
+  { key: "tasks",   label: "✅ 준비할 것" },
+  { key: "vendors", label: "🏢 업체" },
+  { key: "budget",  label: "💰 예산" },
+  { key: "memo",    label: "🗒️ 메모" },
+];
+function dDayLabel(ds) {
+  if (!ds) return "";
+  const diff = Math.round((parseDate(ds) - parseDate(todayStr)) / 86400000);
+  return diff > 0 ? `D-${diff}` : diff === 0 ? "D-DAY 💒" : `D+${-diff}`;
+}
+function WeddingView(props) {
+  const { isMobile, wedding, setWedding } = props;
+  const [sub, setSub] = useState(() => load("jjanto_wedding_tab", "guests"));
+  function pick(k) { setSub(k); save("jjanto_wedding_tab", k); }
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
+      <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: C.sub }}>💒 결혼식</span>
+          <input type="date" value={wedding.date || ""} onChange={e => setWedding(p => ({ ...p, date: e.target.value }))} style={{ ...smallInp, width: 140 }} />
+          {wedding.date && <span style={{ fontSize: 16, fontWeight: 900, color: C.rose }}>{dDayLabel(wedding.date)}</span>}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+          {WEDDING_TABS.map(t => (
+            <button key={t.key} onClick={() => pick(t.key)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 99, border: `2px solid ${sub === t.key ? C.rose : C.border}`, background: sub === t.key ? C.rose + "14" : C.white, color: sub === t.key ? C.rose : C.sub, fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{t.label}</button>
+          ))}
+        </div>
+        {sub === "guests"  && <GuestView {...props} />}
+        {sub === "tasks"   && <TaskView {...props} />}
+        {sub === "vendors" && <VendorView {...props} />}
+        {sub === "budget"  && <BudgetView {...props} />}
+        {sub === "memo"    && <WeddingMemoView {...props} />}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [isMobile, setIsMobile] = useState(()=>window.innerWidth<768);
   useEffect(()=>{
@@ -781,12 +1659,13 @@ export default function App() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [memos,     setMemos]     =useState(()=>load("jjanto_memos",[]));
   const [memoInput, setMemoInput] =useState("");
+  const [wedding,   setWedding]   =useState(()=>load("jjanto_wedding",EMPTY_WEDDING));
 
   const [cloudStatus,setCloudStatus]= useState(null);
 
   const isLocalUpdating = useRef(false);
-  const stateRef = useRef({ restDays, todos, cats, memos });
-  stateRef.current = { restDays, todos, cats, memos };
+  const stateRef = useRef({ restDays, todos, cats, memos, wedding });
+  stateRef.current = { restDays, todos, cats, memos, wedding };
   const syncTimer = useRef(null);
 
   useEffect(() => {
@@ -799,6 +1678,7 @@ export default function App() {
         if (remoteData.todos)  { setTodos(remoteData.todos);   save("jjanto_todos", remoteData.todos); }
         if (remoteData.cats)   { setCats(remoteData.cats);     save("jjanto_cats", remoteData.cats); }
         if (remoteData.memos)  { setMemos(remoteData.memos);   save("jjanto_memos", remoteData.memos); }
+        if (remoteData.wedding){ setWedding(remoteData.wedding); save("jjanto_wedding", remoteData.wedding); }
         setCloudStatus({ type: "ok", text: `☁️ 실시간 연동 중 (${new Date().toLocaleTimeString("ko-KR", { timeStyle: "short" })})` });
       } else { setCloudStatus({ type: "ok", text: "💡 새로운 방이 생성되었습니다. 입력 시 자동 저장됩니다." }); }
     }, () => setCloudStatus({ type: "err", text: "❌ 연결 끊김 (로컬 모드)" }));
@@ -823,6 +1703,10 @@ export default function App() {
 
   const setTodosS   =v=>{ const n=typeof v==="function"?v(todos):v;    setTodos(n);    save("jjanto_todos",n);     triggerAutoSave(); };
   const setMemosS   =v=>{ const n=typeof v==="function"?v(memos):v;    setMemos(n);    save("jjanto_memos",n);     triggerAutoSave(); };
+  // 한 번 누를 때 여러 번 고쳐도(예: 단계 추가 + 할 일 추가) 앞의 변경이 사라지지 않게 최신 값을 이어서 써요
+  const weddingRef = useRef(wedding);
+  weddingRef.current = wedding;
+  const setWeddingS =v=>{ const n=typeof v==="function"?v(weddingRef.current):v; weddingRef.current=n; stateRef.current={...stateRef.current, wedding:n}; setWedding(n); save("jjanto_wedding",n); triggerAutoSave(); };
   const setRestDaysS=v=>{ const n=typeof v==="function"?v(restDays):v; setRestDays(n); save("jjanto_rest_days",n); triggerAutoSave(); };
   const isRestDay = ds => restDays.includes(ds);
   function toggleRestDay(ds) { setRestDaysS(p => p.includes(ds) ? p.filter(d=>d!==ds) : [...p, ds]); }
@@ -912,6 +1796,34 @@ export default function App() {
   }
   function openJjantech(ds) { setSelDate(ds); setTab("jjantech"); }
 
+  // 하객 관리: Firebase는 빈 배열을 저장하지 않아서 없는 쪽은 빈 목록으로 채워 읽어요
+  function updateGuests(side, fn) {
+    setWeddingS(p => {
+      const guests = { groom: [], bride: [], ...((p && p.guests) || {}) };
+      return { ...p, guests: { ...guests, [side]: fn(guests[side] || []) } };
+    });
+  }
+  function addGuest(side) {
+    updateGuests(side, list => [...list, { id: genId(), name: "", type: "", meetDate: "", place: "", perPrice: "", attend: "", meal: "", gift: "", memo: "" }]);
+  }
+  function updateGuest(side, id, key, value) {
+    updateGuests(side, list => list.map(g => g.id === id ? { ...g, [key]: value } : g));
+  }
+  function removeGuest(side, id) {
+    updateGuests(side, list => list.filter(g => g.id !== id));
+  }
+  // 정렬은 저장된 순서 자체를 바꿔요. 그래서 고치는 도중에 줄이 갑자기 움직이지 않아요. 빈칸은 항상 맨 아래로 가요.
+  function sortGuests(side, key, dir) {
+    const col = GUEST_COLS.find(c => c.key === key);
+    const val = g => col && col.num ? toWon(g[key]) : (g[key] || "");
+    const empty = g => !(g[key] || "").toString().trim();
+    updateGuests(side, list => [...list].sort((a, b) => {
+      if (empty(a) || empty(b)) return empty(a) - empty(b);
+      const x = val(a), y = val(b);
+      return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ko")) * dir;
+    }));
+  }
+
   function addMemo(imgData = null) { if(!memoInput.trim() && !imgData) return; setMemosS(p=>[{id:genId(), text:memoInput.trim(), image:imgData, createdAt:new Date().toISOString()}, ...p]); setMemoInput(""); }
   function editMemo(id, text, imgData) { setMemosS(p=>p.map(m=>m.id===id?{...m,text,image:imgData,updatedAt:new Date().toISOString()}:m)); }
   function deleteMemo(id) { setMemosS(p=>p.filter(m=>m.id!==id)); }
@@ -928,6 +1840,7 @@ export default function App() {
   const TABS = [
     {tab:"week",    icon:"📊",  label:"주간표"},
     {tab:"jjantech",icon:"📱",  label:"짠테크"},
+    {tab:"wedding", icon:"💍",  label:"결혼준비"},
     {tab:"memo",    icon:"🗒️", label:"메모"},
     {tab:"archive", icon:"📦",  label:"보관함"},
   ];
@@ -941,6 +1854,7 @@ export default function App() {
       )}
       {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} clearJjantechItems={clearJjantechItems} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
       {tab==="memo"&&<MemoView isMobile={isMobile} memos={memos} memoInput={memoInput} setMemoInput={setMemoInput} addMemo={addMemo} editMemo={editMemo} deleteMemo={deleteMemo}/>}
+      {tab==="wedding"&&<WeddingView isMobile={isMobile} wedding={wedding||EMPTY_WEDDING} setWedding={setWeddingS} addGuest={addGuest} updateGuest={updateGuest} removeGuest={removeGuest} sortGuests={sortGuests}/>}
       {tab==="archive"&&<ArchiveView isMobile={isMobile} todos={todos} cats={cats} setTodosS={setTodosS}/>}
     </>
   );
