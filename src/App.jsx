@@ -224,7 +224,7 @@ const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,bo
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
 // 랜덤 종이 뽑기 보상. 일간 규칙은 하루 달성률마다, 주간 규칙은 주간 달성률로 따로 세요.
 // 그 주에 초과수당·보너스·월급 같은 추가 수입이 들어오면 한 건마다 주간에 1장씩 더 뽑아요.
-const DAY_PAPER_RULES  = [{ min: 100, count: 4 }, { min: 90, count: 3 }, { min: 60, count: 2 }, { min: 30, count: 1 }];
+const DAY_PAPER_RULES  = [{ min: 100, count: 3 }, { min: 60, count: 2 }, { min: 30, count: 1 }];
 const WEEK_PAPER_RULES = [{ min: 100, count: 2 }, { min: 50, count: 1 }];
 // 위에서부터 처음 넘는 기준의 장수예요
 // 추가 수입 건수. 예전에 켜고 끄던 값(true)은 1건으로 봐요.
