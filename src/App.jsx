@@ -22,8 +22,9 @@ const DAYS_KO   = ["일","월","화","수","목","금","토"];
 const WEEK_DAYS = [
   { key:"mon", label:"월" }, { key:"tue", label:"화" }, { key:"wed", label:"수" },
   { key:"thu", label:"목" }, { key:"fri", label:"금" },
+  { key:"sat", label:"토", weekend:true }, { key:"sun", label:"일", weekend:true },
 ];
-// 주간 표와 달성률은 평일(월~금)만 봐요. 주말은 밀린 걸 채우는 보충데이라 계산에서 빠져요.
+// 주간 표는 월~일 일정을 다 적고, 달성률도 월~일 모두 세요.
 const WEEKLY_ROW_COLORS = ["#FF85A1","#FFB347","#7EC8A4","#B39DDB","#64B5F6","#F06292","#4DB6AC","#9575CD"];
 function emptyWeeklyCells() { return { mon:"", tue:"", wed:"", thu:"", fri:"", sat:"", sun:"" }; }
 const EMPTY_JJANTECH = { items: [], log: {} };
@@ -95,11 +96,11 @@ function getMonday(ds) {
 }
 function weekdayDates(wk) { return WEEK_DAYS.map((d, i) => ({ ...d, ds: addDays(wk, i) })); }
 function weekRangeLabel(wk) {
-  const mon = parseDate(wk), fri = parseDate(addDays(wk, 4));
-  return `${mon.getMonth()+1}/${mon.getDate()} ~ ${fri.getMonth()+1}/${fri.getDate()}`;
+  const mon = parseDate(wk), end = parseDate(addDays(wk, 6));
+  return `${mon.getMonth()+1}/${mon.getDate()} ~ ${end.getMonth()+1}/${end.getDate()}`;
 }
 
-// 한 주(월~금)의 일간·주간 달성률을 계산해요.
+// 한 주(월~일)의 일간·주간 달성률을 계산해요.
 // 표의 각 칸 + 짠테크 한 줄(그날 체크리스트를 전부 끝내야 완료)로 세고, 🌿쉼으로 표시한 날은 빼요.
 function computeWeekStats(table, jj, wk, isRestDay) {
   const rows = getEffectiveWeekRows(table, wk);
@@ -129,6 +130,7 @@ function computeWeekStats(table, jj, wk, isRestDay) {
     rows, days, total, done,
     pct: total ? Math.round(done / total * 100) : null,
     cardPct: total + restPlanned ? Math.round((done + restPlanned) / (total + restPlanned) * 100) : (days.some(d => d.rest) ? 100 : null),
+    income: incomeCount(table && table.weeks && table.weeks[wk]),
     jjFullDays: workDays.filter(d => d.jjTotal && d.jjDone === d.jjTotal).length,
     jjActiveDays: workDays.filter(d => d.jjTotal).length,
   };
@@ -220,8 +222,27 @@ function Ring({pct,size=56,stroke=5,color=C.rose,bg=C.pink1}) {
 }
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
+// 랜덤 종이 뽑기 보상. 일간 규칙은 하루 달성률마다, 주간 규칙은 주간 달성률로 따로 세요.
+// 그 주에 초과수당·보너스·월급 같은 추가 수입이 들어오면 한 건마다 주간에 1장씩 더 뽑아요.
+const DAY_PAPER_RULES  = [{ min: 100, count: 4 }, { min: 90, count: 3 }, { min: 60, count: 2 }, { min: 30, count: 1 }];
+const WEEK_PAPER_RULES = [{ min: 100, count: 2 }, { min: 50, count: 1 }];
+// 위에서부터 처음 넘는 기준의 장수예요
+// 추가 수입 건수. 예전에 켜고 끄던 값(true)은 1건으로 봐요.
+function incomeCount(week) { const v = week && week.income; return v === true ? 1 : Math.max(0, Number(v) || 0); }
+function paperCount(pct, rules) { const r = pct === null ? null : rules.find(r => pct >= r.min); return r ? r.count : 0; }
 function tomatoCount(pct) { return pct === null ? 0 : pct === 100 ? 3 : pct >= 70 ? 2 : 1; }
 const navBtn = {background:C.pink1,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:C.rose,fontWeight:800,fontSize:14};
+
+// 뽑기 규칙 칸 하나: 기준(label)과 장수. hit이면 이번 주에 해당해서 빨갛게 보여요.
+function PaperChip({ label, count, hit }) {
+  return (
+    <div style={{ flex: 1, textAlign: "center", borderRadius: 8, padding: "6px 2px", background: hit ? C.rose : C.white, border: `1px solid ${hit ? C.rose : C.border}`, color: hit ? C.white : C.sub }}>
+      <div style={{ fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 900, color: hit ? C.white : C.text }}>{count}장</div>
+    </div>
+  );
+}
+const incomeBtn = on => ({ width: 20, height: 20, padding: 0, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 900, lineHeight: "20px", background: on ? "rgba(255,255,255,.3)" : C.pink1, color: on ? C.white : C.rose, fontFamily: "inherit" });
 
 function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
   return (
@@ -240,10 +261,11 @@ function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
   );
 }
 
-// 주간 표: 행 = 매일 하는 항목, 열 = 월~금. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
+// 주간 표: 행 = 매일 하는 항목, 열 = 월~일. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
 // 짠테크는 항목이 많아서 표에는 "짠테크" 한 줄로만 들어가고, 그날 체크리스트를 다 끝내면 완료로 쳐요.
-function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, openJjantech, openSummary }) {
+function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, resetWeeklyTable, changeWeekIncome, openJjantech, openSummary }) {
   const [editMode, setEditMode] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const captureRef = useRef(null);
   const wk = getMonday(selDate);
   const { rows, days } = stats;
@@ -251,6 +273,10 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
   const range = weekRangeLabel(wk);
   const isThisWeek = wk === getMonday(todayStr);
   const tc = tomatoCount(stats.pct);
+  const dayPapers = days.reduce((s, d) => s + paperCount(d.pct, DAY_PAPER_RULES), 0);
+  const weekPapers = paperCount(stats.pct, WEEK_PAPER_RULES);
+  const incomePapers = stats.income;
+  const papers = dayPapers + weekPapers + incomePapers;
   const cols = WEEK_DAYS.length + 1 + (editMode ? 1 : 0);
 
   function handleSaveTable() {
@@ -261,8 +287,8 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
 
   // PC(넓은 화면)에서는 칸을 넓혀서 체크박스 옆에 글씨가 한 줄로 들어가게 해요
   const wide = !isMobile;
-  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: wide ? "10px 10px 10px 4px" : "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: wide ? 180 : 76, width: wide ? 150 : undefined };
-  const cellTd = d => ({ minWidth: wide ? 140 : 50, padding: wide ? "10px 6px" : "8px 1px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
+  const labelTd = { position: "sticky", left: 0, zIndex: 1, background: C.white, padding: wide ? "10px 10px 10px 4px" : "8px 6px 8px 2px", borderBottom: `1px dashed ${C.border}`, maxWidth: wide ? 180 : 64, width: wide ? 150 : undefined };
+  const cellTd = d => ({ minWidth: wide ? 140 : 38, padding: wide ? "10px 6px" : "8px 1px", borderBottom: `1px dashed ${C.border}`, textAlign: "center", verticalAlign: "middle", background: d.ds === todayStr ? C.rose + "0D" : "transparent", opacity: d.rest ? .35 : 1 });
 
   return (
     <div style={{ maxWidth: wide ? 1240 : 720, margin: "0 auto" }}>
@@ -282,7 +308,36 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", fontSize: 15, fontWeight: 900, color: C.rose }}>🍅 주간 달성률{tc > 0 && <TomatoRow count={tc} />}</div>
             <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 3 }}>
-              {stats.total ? `${stats.done}/${stats.total}칸 완료 · ${range} (월~금)` : "아직 체크할 칸이 없어요"}
+              {stats.total ? `${stats.done}/${stats.total}칸 완료 · ${range}` : "아직 체크할 칸이 없어요"}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: "#FFF8F6", border: `1px dashed ${C.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: C.text }}>🎟️ 랜덤 종이 뽑기 규칙</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: papers ? C.rose : C.sub }}>이번 주 총 {papers}장</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: wide ? "row" : "column", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.sub, marginBottom: 5 }}>📅 일간 규칙 · 하루 달성률마다 <b style={{ color: C.rose }}>{dayPapers}장</b></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[...DAY_PAPER_RULES].reverse().map(r => <PaperChip key={r.min} label={`${r.min}%`} count={r.count} />)}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.sub, marginBottom: 5 }}>📊 주간 규칙 · 주간 달성률 <b style={{ color: C.rose }}>{weekPapers + incomePapers}장</b></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[...WEEK_PAPER_RULES].reverse().map(r => <PaperChip key={r.min} label={`${r.min}%`} count={r.count} hit={weekPapers === r.count} />)}
+                <div title="초과수당·보너스·월급 등 그 주에 들어온 추가 수입 건수만큼 1장씩 더 뽑아요" style={{ flex: 1, textAlign: "center", borderRadius: 8, padding: "6px 2px", background: incomePapers ? C.rose : C.white, border: `1px solid ${incomePapers ? C.rose : C.border}`, color: incomePapers ? C.white : C.sub }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>💰 추가 수입 건당</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <button onClick={() => changeWeekIncome(wk, -1)} disabled={!incomePapers} style={incomeBtn(incomePapers)}>−</button>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: incomePapers ? C.white : C.text }}>+{incomePapers || 1}장</span>
+                    <button onClick={() => changeWeekIncome(wk, 1)} style={incomeBtn(incomePapers)}>＋</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -295,8 +350,8 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
                 {days.map(d => {
                   const isToday = d.ds === todayStr;
                   return (
-                    <th key={d.key} onClick={editMode ? () => toggleRestDay(d.ds) : undefined} style={{ minWidth: 50, padding: "4px 2px 6px", borderBottom: `1.5px solid ${C.border}`, cursor: editMode ? "pointer" : "default", background: isToday ? C.rose + "0D" : "transparent" }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: isToday ? C.rose : C.text }}>{d.label}</div>
+                    <th key={d.key} onClick={editMode ? () => toggleRestDay(d.ds) : undefined} style={{ minWidth: wide ? 50 : 38, padding: "4px 2px 6px", borderBottom: `1.5px solid ${C.border}`, cursor: editMode ? "pointer" : "default", background: isToday ? C.rose + "0D" : "transparent" }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: isToday ? C.rose : d.weekend ? C.sub : C.text }}>{d.label}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? C.rose : C.sub }}>{d.rest ? "🌿" : Number(d.ds.slice(8))}</div>
                     </th>
                   );
@@ -379,6 +434,7 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
                   {days.map(d => (
                     <td key={d.key} style={{ padding: "10px 2px 4px", textAlign: "center", background: d.ds === todayStr ? C.rose + "0D" : "transparent" }}>
                       <span style={{ fontSize: 12, fontWeight: 900, color: d.rest ? C.sub : d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "쉼" : d.pct === null ? "—" : d.pct + "%"}</span>
+                      {paperCount(d.pct, DAY_PAPER_RULES) > 0 && <div style={{ fontSize: 10, fontWeight: 800, color: C.sub, marginTop: 2 }}>🎟️{paperCount(d.pct, DAY_PAPER_RULES)}장</div>}
                     </td>
                   ))}
                   {editMode && <td />}
@@ -404,6 +460,7 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
             🌿 요일 이름을 누르면 그날 전체가 쉼(공휴일 등)으로 빠져요.<br />
             📱 짠테크 줄은 짠테크 탭에 항목을 넣으면 자동으로 생겨요.
           </div>
+          <button onClick={() => setConfirmReset(true)} style={{ marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid #FFB3B3", background: "#FFF0F0", color: "#E63946", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🗑️ 주간표 전체 초기화</button>
         </>
       )}
 
@@ -411,6 +468,20 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
         <button onClick={handleSaveTable} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${C.rose}`, background: C.white, color: C.rose, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📸 표 이미지 저장</button>
         <button onClick={openSummary} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>🎬 영상용 요약 카드</button>
       </div>
+
+      {confirmReset && (
+        <ModalWrap onClose={() => setConfirmReset(false)} zIndex={300} isMobile={isMobile}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#E63946", marginBottom: 10 }}>🗑️ 주간표를 처음부터 다시 시작할까요?</div>
+          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, marginBottom: 16 }}>
+            모든 주의 항목·칸 내용·체크와 🌿쉼 표시가 지워져요. 지운 건 되돌릴 수 없어요.<br />
+            <span style={{ color: C.sub }}>짠테크·결혼준비·메모·보관함은 그대로 남아요.</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setConfirmReset(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 700, background: C.pink1, color: C.sub }}>취소</button>
+            <button onClick={() => { resetWeeklyTable(); setConfirmReset(false); setEditMode(false); }} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 800, background: "#E63946", color: C.white }}>초기화</button>
+          </div>
+        </ModalWrap>
+      )}
     </div>
   );
 }
@@ -430,7 +501,7 @@ function SummaryCardModal({ isMobile, stats, wk, onClose }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 10 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", fontSize: 18, fontWeight: 900, color: C.rose }}>짠토의 성장일지{tc > 0 && <TomatoRow count={tc} />}</div>
-            <div style={{ fontSize: 12, color: C.sub, fontWeight: 700, marginTop: 3 }}>{range} · 월~금</div>
+            <div style={{ fontSize: 12, color: C.sub, fontWeight: 700, marginTop: 3 }}>{range} · 월~일</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             <Ring pct={pct || 0} size={78} stroke={8} />
@@ -473,8 +544,6 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
   const log = (jj.log && jj.log[selDate]) || {};
   const done = items.filter(it => log[it.id]).length;
   const pct = items.length ? Math.round(done / items.length * 100) : 0;
-  const dow = parseDate(selDate).getDay();
-  const weekend = dow === 0 || dow === 6;
   const visible = hideDone && !editMode ? items.filter(it => !log[it.id]) : items;
   const dateLabel = parseDate(selDate).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
 
@@ -503,7 +572,6 @@ function JjantechView({ isMobile, selDate, setSelDate, todayStr, jj, importSourc
             <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, marginTop: 2 }}>
               {items.length ? `${done}/${items.length}개 완료${done === items.length ? " · 완주! 🎉" : ""}` : "편집을 눌러 짠테크 항목을 넣어봐요"}
             </div>
-            {weekend && <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>🌿 주말은 보충데이라 달성률에 안 들어가요</div>}
           </div>
           {!editMode && items.length > 0 && (
             <button onClick={() => setHideDone(p => !p)} style={{ padding: "5px 10px", borderRadius: 99, border: `1.5px solid ${hideDone ? C.rose : C.border}`, background: hideDone ? C.rose + "18" : C.white, color: hideDone ? C.rose : C.sub, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>{hideDone ? `완료 숨김(${done})` : "완료 숨기기"}</button>
@@ -1818,7 +1886,8 @@ export default function App() {
     const unsubscribe = subscribePlannerData(cloudCode, (remoteData) => {
       if (isLocalUpdating.current) { isLocalUpdating.current = false; return; }
       if (remoteData) {
-        if (remoteData.restDays){ setRestDays(remoteData.restDays); save("jjanto_rest_days", remoteData.restDays); }
+        // Firebase는 빈 배열을 저장하지 않아서, 쉼 표시를 다 지우면 restDays가 아예 안 와요. 그때는 빈 목록으로 맞춰요.
+        { const rd = remoteData.restDays || []; setRestDays(rd); save("jjanto_rest_days", rd); }
         if (remoteData.todos)  { setTodos(remoteData.todos);   save("jjanto_todos", remoteData.todos); }
         if (remoteData.cats)   { setCats(remoteData.cats);     save("jjanto_cats", remoteData.cats); }
         if (remoteData.memos)  { setMemos(remoteData.memos);   save("jjanto_memos", remoteData.memos); }
@@ -1867,7 +1936,17 @@ export default function App() {
   function updateWeekRows(wk, fn) {
     setTodosS(p => {
       const table = p.weeklyTable || {};
-      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { v: 2, rows: fn(getEffectiveWeekRows(table, wk)) } } } };
+      const weeks = table.weeks || {};
+      return { ...p, weeklyTable: { weeks: { ...weeks, [wk]: { ...weeks[wk], v: 2, rows: fn(getEffectiveWeekRows(table, wk)) } } } };
+    });
+  }
+  // 그 주에 들어온 추가 수입(초과수당·보너스·월급 등) 건수를 늘리고 줄여요. 한 건마다 주간 뽑기가 1장 늘어요.
+  function changeWeekIncome(wk, delta) {
+    setTodosS(p => {
+      const table = p.weeklyTable || {};
+      const weeks = table.weeks || {};
+      const week = weeks[wk] || {};
+      return { ...p, weeklyTable: { weeks: { ...weeks, [wk]: { ...week, v: 2, rows: getEffectiveWeekRows(table, wk), income: Math.max(0, incomeCount(week) + delta) } } } };
     });
   }
   function addWeeklyRow(wk) {
@@ -1890,6 +1969,11 @@ export default function App() {
   }
   function removeWeeklyRow(wk, rowId) {
     updateWeekRows(wk, rows => rows.filter(r => r.id !== rowId));
+  }
+  // 주간표만 처음 상태로 돌려요. 쉼 표시도 주간표에서만 쓰니까 같이 비우고, 짠테크·결혼준비·메모는 그대로 둬요.
+  function resetWeeklyTable() {
+    setTodosS(p => ({ ...p, weeklyTable: { weeks: {} } }));
+    setRestDaysS([]);
   }
 
   // 짠테크 체크리스트
@@ -2002,7 +2086,7 @@ export default function App() {
     <>
       {tab==="week"&&(
         <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-          <WeeklyBoard isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
+          <WeeklyBoard isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} resetWeeklyTable={resetWeeklyTable} changeWeekIncome={changeWeekIncome} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
         </div>
       )}
       {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} clearJjantechItems={clearJjantechItems} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
