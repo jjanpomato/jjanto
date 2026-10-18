@@ -130,6 +130,7 @@ function computeWeekStats(table, jj, wk, isRestDay) {
     rows, days, total, done,
     pct: total ? Math.round(done / total * 100) : null,
     cardPct: total + restPlanned ? Math.round((done + restPlanned) / (total + restPlanned) * 100) : (days.some(d => d.rest) ? 100 : null),
+    income: !!(table && table.weeks && table.weeks[wk] && table.weeks[wk].income),
     jjFullDays: workDays.filter(d => d.jjTotal && d.jjDone === d.jjTotal).length,
     jjActiveDays: workDays.filter(d => d.jjTotal).length,
   };
@@ -221,11 +222,24 @@ function Ring({pct,size=56,stroke=5,color=C.rose,bg=C.pink1}) {
 }
 const inp = {width:"100%",padding:"9px 12px",border:`1.5px solid ${C.border}`,borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12,fontFamily:"inherit",background:"#FFF8FA",color:C.text};
 function TomatoRow({ count }) { return <span style={{display:"inline-flex",alignItems:"center",gap:1,marginLeft:6}}>{Array.from({length:count}).map((_,i)=><span key={i} style={{fontSize:14,lineHeight:1,filter:"drop-shadow(0 1px 1px rgba(0,0,0,.1))",animation:`tomato-bounce ${0.4+i*0.15}s ease-in-out infinite alternate`}}>🍅</span>)}</span>; }
-// 주간 달성률 보상: 랜덤 종이 뽑기. 위에서부터 처음 넘는 기준의 장수를 뽑아요.
-const PAPER_RULES = [{ min: 100, count: 4 }, { min: 90, count: 3 }, { min: 60, count: 2 }, { min: 30, count: 1 }];
-function paperCount(pct) { const r = pct === null ? null : PAPER_RULES.find(r => pct >= r.min); return r ? r.count : 0; }
+// 랜덤 종이 뽑기 보상. 일간 규칙은 하루 달성률마다, 주간 규칙은 주간 달성률로 따로 세요.
+// 그 주에 초과수당·보너스·월급 같은 추가 수입이 있으면 주간에 1장을 더 뽑아요.
+const DAY_PAPER_RULES  = [{ min: 100, count: 4 }, { min: 90, count: 3 }, { min: 60, count: 2 }, { min: 30, count: 1 }];
+const WEEK_PAPER_RULES = [{ min: 100, count: 2 }, { min: 50, count: 1 }];
+// 위에서부터 처음 넘는 기준의 장수예요
+function paperCount(pct, rules) { const r = pct === null ? null : rules.find(r => pct >= r.min); return r ? r.count : 0; }
 function tomatoCount(pct) { return pct === null ? 0 : pct === 100 ? 3 : pct >= 70 ? 2 : 1; }
 const navBtn = {background:C.pink1,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",color:C.rose,fontWeight:800,fontSize:14};
+
+// 뽑기 규칙 칸 하나: 기준(label)과 장수. hit이면 이번 주에 해당해서 빨갛게, onClick이 있으면 눌러서 켜고 끌 수 있어요.
+function PaperChip({ label, count, hit, plus, onClick, title }) {
+  return (
+    <div onClick={onClick} title={title} style={{ flex: 1, textAlign: "center", borderRadius: 8, padding: "6px 2px", background: hit ? C.rose : C.white, border: `1px ${onClick && !hit ? "dashed" : "solid"} ${hit ? C.rose : C.border}`, color: hit ? C.white : C.sub, cursor: onClick ? "pointer" : "default" }}>
+      <div style={{ fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 900, color: hit ? C.white : C.text }}>{plus ? "+" : ""}{count}장</div>
+    </div>
+  );
+}
 
 function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
   return (
@@ -246,7 +260,7 @@ function WeeklyCheckbox({ checked, onToggle, size = 22 }) {
 
 // 주간 표: 행 = 매일 하는 항목, 열 = 월~일. 맨 아래에 일간 달성률, 위에 주간 달성률이 같이 보여요.
 // 짠테크는 항목이 많아서 표에는 "짠테크" 한 줄로만 들어가고, 그날 체크리스트를 다 끝내면 완료로 쳐요.
-function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, resetWeeklyTable, openJjantech, openSummary }) {
+function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRestDay, addWeeklyRow, updateWeeklyLabel, updateWeeklyCell, toggleWeeklyCheck, toggleWeeklyOff, removeWeeklyRow, resetWeeklyTable, toggleWeekIncome, openJjantech, openSummary }) {
   const [editMode, setEditMode] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const captureRef = useRef(null);
@@ -256,7 +270,10 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
   const range = weekRangeLabel(wk);
   const isThisWeek = wk === getMonday(todayStr);
   const tc = tomatoCount(stats.pct);
-  const papers = paperCount(stats.pct);
+  const dayPapers = days.reduce((s, d) => s + paperCount(d.pct, DAY_PAPER_RULES), 0);
+  const weekPapers = paperCount(stats.pct, WEEK_PAPER_RULES);
+  const incomePapers = stats.income ? 1 : 0;
+  const papers = dayPapers + weekPapers + incomePapers;
   const cols = WEEK_DAYS.length + 1 + (editMode ? 1 : 0);
 
   function handleSaveTable() {
@@ -296,18 +313,22 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
         <div style={{ background: "#FFF8F6", border: `1px dashed ${C.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: C.text }}>🎟️ 랜덤 종이 뽑기 규칙</span>
-            <span style={{ fontSize: 12, fontWeight: 900, color: papers ? C.rose : C.sub }}>{papers ? `이번 주 ${papers}장 뽑기!` : "아직 0장"}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: papers ? C.rose : C.sub }}>이번 주 총 {papers}장</span>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[...PAPER_RULES].reverse().map(r => {
-              const hit = papers === r.count;
-              return (
-                <div key={r.min} style={{ flex: 1, textAlign: "center", borderRadius: 8, padding: "6px 2px", background: hit ? C.rose : C.white, border: `1px solid ${hit ? C.rose : C.border}`, color: hit ? C.white : C.sub }}>
-                  <div style={{ fontSize: 11, fontWeight: 800 }}>{r.min}%</div>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: hit ? C.white : C.text }}>{r.count}장</div>
-                </div>
-              );
-            })}
+          <div style={{ display: "flex", flexDirection: wide ? "row" : "column", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.sub, marginBottom: 5 }}>📅 일간 규칙 · 하루 달성률마다 <b style={{ color: C.rose }}>{dayPapers}장</b></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[...DAY_PAPER_RULES].reverse().map(r => <PaperChip key={r.min} label={`${r.min}%`} count={r.count} />)}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.sub, marginBottom: 5 }}>📊 주간 규칙 · 주간 달성률 <b style={{ color: C.rose }}>{weekPapers + incomePapers}장</b></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[...WEEK_PAPER_RULES].reverse().map(r => <PaperChip key={r.min} label={`${r.min}%`} count={r.count} hit={weekPapers === r.count} />)}
+                <PaperChip label="💰 추가 수입" count={1} plus hit={stats.income} onClick={() => toggleWeekIncome(wk)} title="초과수당·보너스·월급 등 그 주에 추가 수입이 있으면 눌러요" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -403,6 +424,7 @@ function WeeklyBoard({ isMobile, selDate, setSelDate, todayStr, stats, toggleRes
                   {days.map(d => (
                     <td key={d.key} style={{ padding: "10px 2px 4px", textAlign: "center", background: d.ds === todayStr ? C.rose + "0D" : "transparent" }}>
                       <span style={{ fontSize: 12, fontWeight: 900, color: d.rest ? C.sub : d.pct === 100 ? "#4CAF84" : C.rose }}>{d.rest ? "쉼" : d.pct === null ? "—" : d.pct + "%"}</span>
+                      {paperCount(d.pct, DAY_PAPER_RULES) > 0 && <div style={{ fontSize: 10, fontWeight: 800, color: C.sub, marginTop: 2 }}>🎟️{paperCount(d.pct, DAY_PAPER_RULES)}장</div>}
                     </td>
                   ))}
                   {editMode && <td />}
@@ -1904,7 +1926,17 @@ export default function App() {
   function updateWeekRows(wk, fn) {
     setTodosS(p => {
       const table = p.weeklyTable || {};
-      return { ...p, weeklyTable: { weeks: { ...(table.weeks || {}), [wk]: { v: 2, rows: fn(getEffectiveWeekRows(table, wk)) } } } };
+      const weeks = table.weeks || {};
+      return { ...p, weeklyTable: { weeks: { ...weeks, [wk]: { ...weeks[wk], v: 2, rows: fn(getEffectiveWeekRows(table, wk)) } } } };
+    });
+  }
+  // 그 주에 추가 수입(초과수당·보너스·월급 등)이 있었는지 표시해요. 있으면 주간 뽑기가 1장 늘어요.
+  function toggleWeekIncome(wk) {
+    setTodosS(p => {
+      const table = p.weeklyTable || {};
+      const weeks = table.weeks || {};
+      const week = weeks[wk] || {};
+      return { ...p, weeklyTable: { weeks: { ...weeks, [wk]: { ...week, v: 2, rows: getEffectiveWeekRows(table, wk), income: !week.income } } } };
     });
   }
   function addWeeklyRow(wk) {
@@ -2044,7 +2076,7 @@ export default function App() {
     <>
       {tab==="week"&&(
         <div style={{flex:1,overflow:"auto",padding:isMobile?"14px 14px 80px":"20px 28px"}}>
-          <WeeklyBoard isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} resetWeeklyTable={resetWeeklyTable} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
+          <WeeklyBoard isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} stats={stats} toggleRestDay={toggleRestDay} addWeeklyRow={addWeeklyRow} updateWeeklyLabel={updateWeeklyLabel} updateWeeklyCell={updateWeeklyCell} toggleWeeklyCheck={toggleWeeklyCheck} toggleWeeklyOff={toggleWeeklyOff} removeWeeklyRow={removeWeeklyRow} resetWeeklyTable={resetWeeklyTable} toggleWeekIncome={toggleWeekIncome} openJjantech={openJjantech} openSummary={()=>setSummaryOpen(true)} />
         </div>
       )}
       {tab==="jjantech"&&<JjantechView isMobile={isMobile} selDate={selDate} setSelDate={setSelDate} todayStr={todayStr} jj={jj} importSources={importSources} importFromCat={importFromCat} clearJjantechItems={clearJjantechItems} toggleJjantech={toggleJjantech} addJjantechItems={addJjantechItems} renameJjantechItem={renameJjantechItem} removeJjantechItem={removeJjantechItem} moveJjantechItem={moveJjantechItem}/>}
