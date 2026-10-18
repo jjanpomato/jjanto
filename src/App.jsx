@@ -905,6 +905,16 @@ function GuestView({ isMobile, wedding, setWedding, addGuest, updateGuest, remov
     if (window.confirm(`${(g.name || "").trim() || "이름 없는 하객"} 줄을 지울까요?`)) removeGuest(side, g.id);
   }
   function switchSide(k) { setSide(k); setSort({ key: null, dir: 1 }); }
+  // 📤 짠포마토의 기록 › 👥 하객 탭으로 옮길 수 있게 하객·청모를 글자로 복사해요
+  async function exportToPomato() {
+    const text = JSON.stringify({ type: "jjanto-wedding-guests", guests: { groom: asList(all.groom), bride: asList(all.bride) }, meetings });
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert("하객·청모를 복사했어요! 짠포마토의 기록 › 👥 하객에서 '📥 플래너에서 가져오기'를 누르고 붙여넣어요.");
+    } catch {
+      window.prompt("아래 내용을 전부 복사해서 짠포마토의 기록에 붙여넣어요.", text);
+    }
+  }
 
   const th = { padding: "8px 6px", fontSize: 12, fontWeight: 800, color: C.white, whiteSpace: "nowrap", background: sideInfo.color, cursor: "pointer", userSelect: "none" };
   const sumCell = { padding: "8px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" };
@@ -913,6 +923,9 @@ function GuestView({ isMobile, wedding, setWedding, addGuest, updateGuest, remov
 
   return (
     <>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button onClick={exportToPomato} style={{ ...editBtn(false), background: C.white, color: C.rose, border: `1.5px solid ${C.rose}` }}>📤 짠포마토로 보내기</button>
+        </div>
 
         {/* 요약표: 이름을 적은 줄만 세요 */}
         <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, boxShadow: `0 2px 10px ${C.pink1}`, overflowX: "auto", marginBottom: 16 }}>
