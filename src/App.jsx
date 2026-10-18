@@ -1416,6 +1416,16 @@ function BudgetView({ isMobile, wedding, setWedding }) {
   function removeItem(it) {
     if (window.confirm(`${it.item || "이"} 항목을 지울까요?`)) upd(b => ({ ...b, items: b.items.filter(x => x.id !== it.id) }));
   }
+  // 📤 짠포마토의 기록 › 💍 결혼 예산 탭으로 옮길 수 있게 예산표를 글자로 복사해요
+  async function exportToPomato() {
+    const text = JSON.stringify({ type: "jjanto-wedding-budget", total: budget.total || "", groups, items });
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert("예산표를 복사했어요! 짠포마토의 기록 › 💍 결혼 예산에서 '📥 플래너에서 가져오기'를 누르고 붙여넣어요.");
+    } catch {
+      window.prompt("아래 내용을 전부 복사해서 짠포마토의 기록에 붙여넣어요.", text);
+    }
+  }
 
   const sum = (list, k) => list.reduce((s, it) => s + toWon(it[k]), 0);
   const rest = it => Math.max(0, toWon(it.cost) - toWon(it.paid));
@@ -1471,7 +1481,8 @@ function BudgetView({ isMobile, wedding, setWedding }) {
       </div>
 
       {items.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
+          <button onClick={exportToPomato} style={{ ...editBtn(false), background: C.white, color: C.rose, border: `1.5px solid ${C.rose}` }}>📤 짠포마토로 보내기</button>
           <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "분류 편집"}</button>
         </div>
       )}
