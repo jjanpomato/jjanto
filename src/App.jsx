@@ -1328,276 +1328,7 @@ function TaskView({ isMobile, wedding, setWedding }) {
   );
 }
 
-// 💰 예산표: 대분류별로 항목을 적고, 금액을 신랑·신부가 얼마씩 내는지 나눠 적어요.
-const BUDGET_GROUPS = [
-  { key: "meet",    label: "상견례",    color: "#F4B6C2", items: ["신랑측 부모님 선물", "신부측 부모님 선물", "식사"] },
-  { key: "hall",    label: "웨딩홀",    color: "#FFD27F", items: ["예약금", "대관료", "꽃장식", "신랑측 식대", "신부측 식대"] },
-  { key: "sdm",     label: "스드메",    color: "#FFE7A3", items: ["스튜디오", "드레스", "메이크업", "플래닝비", "헬퍼비", "헤어변형", "촬영 소품·간식"] },
-  { key: "main",    label: "본식",      color: "#B9E3C6", items: ["신랑 예복", "혼주 메이크업", "혼주 한복", "아버님 예복", "부케·부토니에", "본식 스냅·영상", "사회자·축가 사례"] },
-  { key: "jewelry", label: "예물·예단", color: "#D9C8F0", items: ["웨딩밴드", "프로포즈 반지", "예단"] },
-  { key: "honey",   label: "신혼여행",  color: "#B7D7F2", items: ["항공권", "숙소", "환전", "여행 경비", "쇼핑"] },
-  { key: "etc",     label: "기타",      color: "#E3DAD7", items: ["종이 청첩장", "모바일 청첩장", "답례품"] },
-];
-const BUDGET_COLS = [
-  { key: "item",   label: "항목",   w: 120 },
-  { key: "detail", label: "내용",   w: 170 },
-  { key: "plan",   label: "예산",   w: 100, num: true },
-  { key: "cost",   label: "금액",   w: 100, num: true },
-  { key: "groom",  label: "💙 신랑", w: 100, num: true },
-  { key: "bride",  label: "🩷 신부", w: 100, num: true },
-  { key: "paid",   label: "낸 돈",  w: 100, num: true },
-  { key: "memo",   label: "메모",   w: 140 },
-];
-const BUDGET_DEFAULT_SECTIONS = BUDGET_GROUPS.map(({ key, label, color }) => ({ key, label, color }));
-const SECTION_COLORS = ["#F4B6C2", "#FFD27F", "#FFE7A3", "#B9E3C6", "#D9C8F0", "#B7D7F2", "#E3DAD7", "#FFC8A8"];
-// 호갱 vs 실속: 릴스에서 본 결혼비용 차이 포인트
-const BUDGET_TIPS = [
-  ["풀패키지 (스드메+웨딩홀 2000만원)", "필요한 것만 선택계약"],
-  ["앨범 추가 (추가금 300만원~)", "기본앨범 + 원본"],
-  ["맞춤 예복 (브랜드 300만원~)", "기성복 (50만원~)"],
-  ["제시한 보증인원 그대로", "최소 보증인원으로 협상"],
-  ["혼주 한복 맞춤 (양가 300만원~)", "혼주 한복 대여 (양가 80만원~)"],
-  ["서브스냅 추가 (100만원~)", "본식 스냅만 (계약 포함)"],
-];
-function BudgetView({ isMobile, wedding, setWedding }) {
-  const [tipsOpen, setTipsOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const budget = wedding.budget || {};
-  const items = asList(budget.items);
-  const groups = sectionsOf(wedding, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
-  const groupKeys = new Set(groups.map(g => g.key));
-  const groupOf = it => groupKeys.has(it.group) ? it.group : ORPHAN.key;
-  const shownGroups = [...groups, ...(items.some(it => !groupKeys.has(it.group)) ? [{ ...ORPHAN, color: "#E3DAD7" }] : [])];
-  const upd = fn => setWedding(p => ({ ...p, budget: fn({ ...(p.budget || {}), items: asList(p.budget && p.budget.items) }) }));
-  const updGroups = fn => setWedding(p => ({ ...p, budgetGroups: fn(sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS)) }));
-  function loadTemplate() {
-    setWedding(p => {
-      const cur = sectionsOf(p, "budgetGroups", BUDGET_DEFAULT_SECTIONS);
-      const have = new Set(cur.map(g => g.key));
-      const b = p.budget || {};
-      return { ...p, budgetGroups: [...cur, ...BUDGET_DEFAULT_SECTIONS.filter(g => !have.has(g.key))], budget: { ...b, items: [...asList(b.items), ...BUDGET_GROUPS.flatMap(g => g.items.map(name => newItem(g.key, name)))] } };
-    });
-  }
-  function addGroup() {
-    const key = "bg_" + genId();
-    updGroups(list => [...list, { key, label: "새 분류", color: SECTION_COLORS[list.length % SECTION_COLORS.length] }]);
-    upd(b => ({ ...b, items: [...b.items, newItem(key)] }));
-  }
-  function removeGroup(g) {
-    const n = items.filter(it => it.group === g.key).length;
-    if (groups.length <= 1) { window.alert("분류는 하나 이상 있어야 해요."); return; }
-    if (!window.confirm(`'${g.label}' 분류를 지울까요?${n ? ` 안에 있는 항목 ${n}개도 같이 지워져요.` : ""}`)) return;
-    updGroups(list => list.filter(x => x.key !== g.key));
-    upd(b => ({ ...b, items: b.items.filter(it => it.group !== g.key) }));
-  }
-  // 같은 분류 안에서 위아래로 옮겨요
-  function moveItem(it, dir) {
-    upd(b => {
-      const same = b.items.filter(x => groupOf(x) === groupOf(it));
-      const j = same.findIndex(x => x.id === it.id) + dir;
-      if (j < 0 || j >= same.length) return b;
-      const i = b.items.findIndex(x => x.id === it.id);
-      return { ...b, items: moveInList(b.items, i, b.items.findIndex(x => x.id === same[j].id) - i) };
-    });
-  }
-  // 편집 모드에서 항목 옆에 나오는 분류 옮기기·순서 버튼
-  const itemTools = (it, idx, len) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
-      <select value={groupOf(it)} onChange={e => setItem(it.id, "group", e.target.value)} title="다른 분류로 옮기기" style={{ ...smallInp, width: 88, padding: "4px 4px" }}>
-        {groups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
-        {groupOf(it) === ORPHAN.key && <option value={ORPHAN.key}>{ORPHAN.label}</option>}
-      </select>
-      <button onClick={() => moveItem(it, -1)} disabled={idx === 0} style={{ ...iconBtn, opacity: idx === 0 ? .25 : .8 }}>↑</button>
-      <button onClick={() => moveItem(it, 1)} disabled={idx === len - 1} style={{ ...iconBtn, opacity: idx === len - 1 ? .25 : .8 }}>↓</button>
-    </span>
-  );
-  const setItem = (id, key, v) => upd(b => ({ ...b, items: b.items.map(it => it.id === id ? { ...it, [key]: v } : it) }));
-  const newItem = (group, item = "") => ({ id: genId(), group, item, detail: "", plan: "", cost: "", groom: "", bride: "", paid: "", memo: "" });
-  function removeItem(it) {
-    if (window.confirm(`${it.item || "이"} 항목을 지울까요?`)) upd(b => ({ ...b, items: b.items.filter(x => x.id !== it.id) }));
-  }
-  // 📤 짠포마토의 기록 › 💍 결혼 예산 탭으로 옮길 수 있게 예산표를 글자로 복사해요
-  async function exportToPomato() {
-    const text = JSON.stringify({ type: "jjanto-wedding-budget", total: budget.total || "", groups, items });
-    try {
-      await navigator.clipboard.writeText(text);
-      window.alert("예산표를 복사했어요! 짠포마토의 기록 › 💍 결혼 예산에서 '📥 플래너에서 가져오기'를 누르고 붙여넣어요.");
-    } catch {
-      window.prompt("아래 내용을 전부 복사해서 짠포마토의 기록에 붙여넣어요.", text);
-    }
-  }
-
-  const sum = (list, k) => list.reduce((s, it) => s + toWon(it[k]), 0);
-  const rest = it => Math.max(0, toWon(it.cost) - toWon(it.paid));
-  // 신랑+신부로 나눈 돈이 금액과 다르면 알려줘요 (둘 다 비어 있으면 아직 안 나눈 걸로 봐요)
-  const splitGap = it => (it.groom || it.bride) ? toWon(it.cost) - toWon(it.groom) - toWon(it.bride) : 0;
-  const cost = sum(items, "cost"), groom = sum(items, "groom"), bride = sum(items, "bride");
-  const unassigned = items.reduce((s, it) => s + (it.groom || it.bride ? 0 : toWon(it.cost)), 0);
-  const balance = items.reduce((s, it) => s + rest(it), 0);
-  // 예상 지출: 금액이 정해진 항목은 금액, 아직이면 예산으로 쳐요
-  const expected = items.reduce((s, it) => s + (toWon(it.cost) || toWon(it.plan)), 0);
-  const total = toWon(budget.total);
-  const left = total - expected;
-
-  const card = (label, value, color = C.text, sub) => (
-    <div style={{ background: C.white, borderRadius: 12, border: `1.5px solid ${C.border}`, padding: "10px 12px" }}>
-      <div style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 900, color, marginTop: 2 }}>{fmtWon(value)}원</div>
-      {sub && <div style={{ fontSize: 10, color: C.sub, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-  const field = (it, c, style) => <KoreanInput key={c.key + "-" + it.id} value={it[c.key] || ""} inputMode={c.num ? "numeric" : undefined} placeholder={c.num ? "0" : ""} onChange={v => setItem(it.id, c.key, c.num ? v.replace(/[^\d]/g, "") : v)} style={{ ...smallInp, textAlign: c.num ? "right" : "left", ...style }} />;
-  const gapNote = it => { const g = splitGap(it); return g ? <span style={{ fontSize: 10, color: "#C98A00", fontWeight: 700 }}>⚠️ 나눈 돈이 금액보다 {fmtWon(Math.abs(g))}원 {g > 0 ? "적어요" : "많아요"}</span> : null; };
-  const th = { padding: "7px 6px", fontSize: 12, fontWeight: 800, color: C.text, whiteSpace: "nowrap", borderBottom: `1px solid ${C.border}` };
-  const numTd = { padding: "6px 8px", textAlign: "right", fontSize: 13, fontWeight: 900, whiteSpace: "nowrap" };
-
-  return (
-    <>
-      <div style={{ background: C.white, borderRadius: 16, border: `1.5px solid ${C.border}`, padding: "12px 14px", marginBottom: 10, boxShadow: `0 2px 10px ${C.pink1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 14, fontWeight: 900, color: C.rose }}>💰 총 예산</span>
-        <KoreanInput key="budget-total" value={budget.total || ""} inputMode="numeric" placeholder="예) 30000000" onChange={v => setWedding(p => ({ ...p, budget: { ...(p.budget || {}), total: v.replace(/[^\d]/g, "") } }))} style={{ ...smallInp, width: 150, textAlign: "right", fontSize: 14, fontWeight: 800 }} />
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{total > 0 ? `${fmtWon(total)}원` : "원"}</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 8, marginBottom: 14 }}>
-        {card("지금까지 결혼비용", cost, C.rose, unassigned ? `아직 안 나눈 돈 ${fmtWon(unassigned)}원` : "금액 칸 합계")}
-        {card("💙 신랑 총 결혼비용", groom)}
-        {card("🩷 신부 총 결혼비용", bride)}
-        {card("남은 잔금", balance, C.tomato, "금액 − 낸 돈")}
-        {card(left >= 0 ? "총 예산 대비 여유" : "총 예산 초과", Math.abs(left), left >= 0 ? "#4CAF84" : C.tomato, total ? "금액이 없는 항목은 예산으로 계산" : "위에 총 예산을 적어주세요")}
-      </div>
-
-      <div style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, marginBottom: 14, overflow: "hidden" }}>
-        <div onClick={() => setTipsOpen(p => !p)} style={{ padding: "10px 14px", fontSize: 13, fontWeight: 900, color: C.rose, cursor: "pointer", display: "flex" }}>
-          <span style={{ flex: 1 }}>💡 결혼비용 한끗차이: 호갱 vs 실속</span><span style={{ color: C.sub }}>{tipsOpen ? "접기 ▲" : "펼치기 ▼"}</span>
-        </div>
-        {tipsOpen && (
-          <div style={{ padding: "0 14px 12px", maxWidth: 760, display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "6px 8px", fontSize: 12, alignItems: "center" }}>
-            <b style={{ color: C.tomato }}>😵 호갱</b><span /><b style={{ color: "#2E8B57" }}>😎 실속</b>
-            {BUDGET_TIPS.map(([a, b]) => (
-              <Fragment key={a}><span style={{ color: C.sub }}>{a}</span><span style={{ color: C.pink2 }}>→</span><span style={{ fontWeight: 700 }}>{b}</span></Fragment>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {items.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
-          <button onClick={exportToPomato} style={{ ...editBtn(false), background: C.white, color: C.rose, border: `1.5px solid ${C.rose}` }}>📤 짠포마토로 보내기</button>
-          <button onClick={() => setEditMode(p => !p)} style={editBtn(editMode)}>{editMode ? "완료" : "분류 편집"}</button>
-        </div>
-      )}
-      {items.length === 0 && !editMode && (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>상견례부터 신혼여행까지 자주 쓰는 항목을 불러와서 금액만 채워봐요 💰</div>
-          <button onClick={loadTemplate} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.pink3},${C.rose})`, color: C.white, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>📋 기본 항목 불러오기</button>
-          <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>처음부터 직접 만들고 싶으면 <span onClick={() => setEditMode(true)} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>분류 편집</span>을 눌러요</div>
-        </div>
-      )}
-
-      {(items.length > 0 || editMode) && shownGroups.map((g, gi) => {
-        const list = items.filter(it => groupOf(it) === g.key);
-        if (!editMode && list.length === 0) return null;
-        const gCost = sum(list, "cost"), gGroom = sum(list, "groom"), gBride = sum(list, "bride");
-        return (
-          <div key={g.key} style={{ background: C.white, borderRadius: 14, border: `1.5px solid ${C.border}`, marginBottom: 12, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: g.color + "66", flexWrap: "wrap" }}>
-              {editMode && g.key !== ORPHAN.key ? (
-                <SectionEditHead id={g.key} label={g.label} first={gi === 0} last={gi === groups.length - 1}
-                  onRename={v => updGroups(l => l.map(x => x.key === g.key ? { ...x, label: v } : x))}
-                  onMove={dir => updGroups(l => moveInList(l, gi, dir))}
-                  onRemove={() => removeGroup(g)} />
-              ) : (
-                <span style={{ fontSize: 14, fontWeight: 900, color: C.text, flex: 1 }}>{g.label}</span>
-              )}
-              <span style={{ fontSize: 12, fontWeight: 800, color: C.text }}>총 {fmtWon(gCost)}원</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>💙 {fmtWon(gGroom)} · 🩷 {fmtWon(gBride)}</span>
-            </div>
-            {isMobile ? (
-              <div style={{ padding: "6px 10px" }}>
-                {list.map((it, ii) => (
-                  <div key={it.id} style={{ borderBottom: `1px dashed ${C.border}`, padding: "8px 0" }}>
-                    {editMode && <div style={{ marginBottom: 6 }}>{itemTools(it, ii, list.length)}</div>}
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                      {field(it, BUDGET_COLS[0], { fontWeight: 800, width: 110, flex: "none" })}
-                      {field(it, BUDGET_COLS[1], { flex: 1 })}
-                      <button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 14, opacity: .7 }}>✕</button>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                      {BUDGET_COLS.slice(2, 7).map(c => (
-                        <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.sub, fontWeight: 700 }}>
-                          <span style={{ width: 40, flexShrink: 0 }}>{c.label}</span>{field(it, c)}
-                        </label>
-                      ))}
-                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.sub, fontWeight: 700 }}>
-                        <span style={{ width: 40 }}>잔금</span><span style={{ fontSize: 13, fontWeight: 800, color: rest(it) ? C.tomato : C.sub }}>{fmtWon(rest(it))}원</span>
-                      </span>
-                    </div>
-                    {field(it, BUDGET_COLS[7], { marginTop: 6 })}
-                    {gapNote(it)}
-                  </div>
-                ))}
-                {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, margin: "8px 0 4px", padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {BUDGET_COLS.slice(0, 7).map(c => <th key={c.key} style={{ ...th, minWidth: c.w }}>{c.label}</th>)}
-                      <th style={{ ...th, minWidth: 90 }}>잔금</th>
-                      <th style={{ ...th, minWidth: BUDGET_COLS[7].w }}>메모</th>
-                      <th style={{ ...th, width: 30 }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((it, ii) => (
-                      <Fragment key={it.id}>
-                        <tr>
-                          {BUDGET_COLS.slice(0, 7).map(c => <td key={c.key} style={{ padding: "4px 3px" }}>{field(it, c, c.key === "item" ? { fontWeight: 800 } : undefined)}</td>)}
-                          <td style={{ ...numTd, fontWeight: 800, color: rest(it) ? C.tomato : C.sub }}>{fmtWon(rest(it))}원</td>
-                          <td style={{ padding: "4px 3px" }}>{field(it, BUDGET_COLS[7])}</td>
-                          <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>{editMode && itemTools(it, ii, list.length)}<button onClick={() => removeItem(it)} style={{ background: "none", border: "none", cursor: "pointer", color: C.tomato, fontSize: 13, opacity: .7 }}>✕</button></td>
-                        </tr>
-                        {splitGap(it) !== 0 && <tr><td /><td colSpan={9} style={{ padding: "0 4px 4px" }}>{gapNote(it)}</td></tr>}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ padding: "6px 10px 10px" }}>
-                  {g.key !== ORPHAN.key && <button onClick={() => upd(b => ({ ...b, items: [...b.items, newItem(g.key)] }))} style={{ ...dashedAddBtn, padding: "6px 0" }}>＋ {g.label} 항목 추가</button>}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {editMode && (
-        <>
-          <button onClick={addGroup} style={{ ...dashedAddBtn, marginBottom: 12 }}>＋ 새 분류 추가</button>
-          <div style={{ ...tipBox, marginTop: 0, marginBottom: 12 }}>
-            ✏️ 분류 이름을 고치고 ↑↓로 순서를 바꿀 수 있어요. 🗑️를 누르면 그 분류와 안의 항목이 같이 지워져요.<br />
-            🔀 항목 옆 목록으로 다른 분류로 옮기고, ↑↓로 순서를 바꿔요.
-            {items.length > 0 && <><br />📋 <span onClick={loadTemplate} style={{ textDecoration: "underline", cursor: "pointer", fontWeight: 800 }}>기본 항목 한 번 더 불러오기</span> (지금 항목 뒤에 덧붙여져요)</>}
-          </div>
-        </>
-      )}
-      {items.length > 0 && (
-        <div style={{ background: "#3A3A3A", color: C.white, borderRadius: 14, padding: "12px 16px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 6, fontSize: 14, fontWeight: 800 }}>
-          <span>💙 신랑 총결혼비용 {fmtWon(groom)}원</span>
-          <span>🩷 신부 총결혼비용 {fmtWon(bride)}원</span>
-          <span>💍 총 결혼비용 {fmtWon(cost)}원</span>
-        </div>
-      )}
-      <div style={tipBox}>
-        💡 <b>예산</b>은 쓰기로 마음먹은 돈, <b>금액</b>은 실제로 계약하거나 쓴 돈이에요. 금액을 💙신랑·🩷신부 칸에 누가 얼마씩 내는지 나눠 적어요.<br />
-        🧾 <b>낸 돈</b>은 계약금처럼 이미 보낸 돈이고, <b>잔금</b> = 금액 − 낸 돈이에요.
-      </div>
-    </>
-  );
-}
-
-// 🏢 업체 관리: 항목마다 미정 → 후보 → 계약완료(또는 안 함)로 진행 상황을 봐요. 돈은 예산표에만 적어요.
+// 🏢 업체 관리: 항목마다 미정 → 후보 → 계약완료(또는 안 함)로 진행 상황을 봐요. 돈은 짠포마토의 기록 › 💍 결혼 예산에 적어요.
 const VENDOR_GROUPS = [
   { key: "all",  label: "전체" },
   { key: "hall", label: "웨딩홀" },
@@ -1816,12 +1547,11 @@ function WeddingMemoView({ wedding, setWedding }) {
   );
 }
 
-// 💍 결혼준비 탭: 하객 · 준비할 것 · 업체 · 예산 · 메모를 위쪽 작은 탭으로 오가요
+// 💍 결혼준비 탭: 하객 · 준비할 것 · 업체 · 메모를 위쪽 작은 탭으로 오가요
 const WEDDING_TABS = [
   { key: "guests",  label: "👥 하객" },
   { key: "tasks",   label: "✅ 준비할 것" },
   { key: "vendors", label: "🏢 업체" },
-  { key: "budget",  label: "💰 예산" },
   { key: "memo",    label: "🗒️ 메모" },
 ];
 function dDayLabel(ds) {
@@ -1831,7 +1561,8 @@ function dDayLabel(ds) {
 }
 function WeddingView(props) {
   const { isMobile, wedding, setWedding } = props;
-  const [sub, setSub] = useState(() => load("jjanto_wedding_tab", "guests"));
+  // 예전에 고른 탭이 없어졌으면(예: 예산) 하객 탭으로 열어요
+  const [sub, setSub] = useState(() => { const k = load("jjanto_wedding_tab", "guests"); return WEDDING_TABS.some(t => t.key === k) ? k : "guests"; });
   function pick(k) { setSub(k); save("jjanto_wedding_tab", k); }
   return (
     <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
@@ -1849,7 +1580,6 @@ function WeddingView(props) {
         {sub === "guests"  && <GuestView {...props} />}
         {sub === "tasks"   && <TaskView {...props} />}
         {sub === "vendors" && <VendorView {...props} />}
-        {sub === "budget"  && <BudgetView {...props} />}
         {sub === "memo"    && <WeddingMemoView {...props} />}
       </div>
     </div>
