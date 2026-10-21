@@ -1248,6 +1248,16 @@ function WeddingView(props) {
   // 예전에 고른 탭이 없어졌으면(예: 예산·하객) 준비할 것 탭으로 열어요
   const [sub, setSub] = useState(() => { const k = load("jjanto_wedding_tab", "tasks"); return WEDDING_TABS.some(t => t.key === k) ? k : "tasks"; });
   function pick(k) { setSub(k); save("jjanto_wedding_tab", k); }
+  // 📤 짠포마토의 기록 › ✅ 결혼 준비 탭으로 옮길 수 있게 준비할 것·업체·메모·결혼식 날짜를 글자로 복사해요
+  async function exportToPomato() {
+    const text = JSON.stringify({ type: "jjanto-wedding-prep", date: wedding.date || "", tasks: asList(wedding.tasks), taskStages: asList(wedding.taskStages), vendors: asList(wedding.vendors), vendorGroups: asList(wedding.vendorGroups), memos: asList(wedding.memos) });
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert("결혼준비 전체를 복사했어요! 짠포마토의 기록 › ✅ 결혼 준비에서 '📥 플래너에서 가져오기'를 누르면 돼요.");
+    } catch {
+      window.prompt("아래 내용을 전부 복사해서 짠포마토의 기록에 붙여넣어요.", text);
+    }
+  }
   return (
     <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "14px 14px 80px" : "20px 28px" }}>
       <div style={{ maxWidth: 1240, margin: "0 auto" }}>
@@ -1255,6 +1265,7 @@ function WeddingView(props) {
           <span style={{ fontSize: 13, fontWeight: 800, color: C.sub }}>💒 결혼식</span>
           <input type="date" value={wedding.date || ""} onChange={e => setWedding(p => ({ ...p, date: e.target.value }))} style={{ ...smallInp, width: 140 }} />
           {wedding.date && <span style={{ fontSize: 16, fontWeight: 900, color: C.rose }}>{dDayLabel(wedding.date)}</span>}
+          <button onClick={exportToPomato} style={{ ...editBtn(false), marginLeft: "auto", background: C.white, color: C.rose, border: `1.5px solid ${C.rose}` }}>📤 짠포마토로 보내기</button>
         </div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
           {WEDDING_TABS.map(t => (
