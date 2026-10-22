@@ -849,14 +849,14 @@ export default function App() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [memos,     setMemos]     =useState(()=>load("jjanto_memos",[]));
   const [memoInput, setMemoInput] =useState("");
-  // 💍 결혼준비 탭은 없앴지만, 클라우드에 있던 결혼준비 데이터가 저장할 때 지워지지 않게 그대로 실어 보내요
-  const [wedding,   setWedding]   =useState(()=>load("jjanto_wedding",{}));
+  // 💍 결혼준비는 짠포마토의 기록으로 옮겨서 이 기기에 남은 예전 데이터도 지워요. 클라우드 쪽은 다음 저장 때 같이 빠져요.
+  useEffect(()=>{ try{ localStorage.removeItem("jjanto_wedding"); localStorage.removeItem("jjanto_wedding_tab"); }catch{} },[]);
 
   const [cloudStatus,setCloudStatus]= useState(null);
 
   const isLocalUpdating = useRef(false);
-  const stateRef = useRef({ restDays, todos, cats, memos, wedding });
-  stateRef.current = { restDays, todos, cats, memos, wedding };
+  const stateRef = useRef({ restDays, todos, cats, memos });
+  stateRef.current = { restDays, todos, cats, memos };
   const syncTimer = useRef(null);
 
   useEffect(() => {
@@ -870,7 +870,6 @@ export default function App() {
         if (remoteData.todos)  { setTodos(remoteData.todos);   save("jjanto_todos", remoteData.todos); }
         if (remoteData.cats)   { setCats(remoteData.cats);     save("jjanto_cats", remoteData.cats); }
         if (remoteData.memos)  { setMemos(remoteData.memos);   save("jjanto_memos", remoteData.memos); }
-        if (remoteData.wedding){ setWedding(remoteData.wedding); save("jjanto_wedding", remoteData.wedding); }
         setCloudStatus({ type: "ok", text: `☁️ 실시간 연동 중 (${new Date().toLocaleTimeString("ko-KR", { timeStyle: "short" })})` });
       } else { setCloudStatus({ type: "ok", text: "💡 새로운 방이 생성되었습니다. 입력 시 자동 저장됩니다." }); }
     }, () => setCloudStatus({ type: "err", text: "❌ 연결 끊김 (로컬 모드)" }));
