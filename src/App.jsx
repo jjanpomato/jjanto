@@ -1288,7 +1288,7 @@ export default function App() {
     return ()=>window.removeEventListener("resize",h);
   },[]);
 
-  const [cloudCode] = useState(() => {
+  const [cloudCode, setCloudCode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     if (roomParam) { save("jjanto_cloud_code", roomParam); return roomParam; }
@@ -1332,6 +1332,21 @@ export default function App() {
     }, () => setCloudStatus({ type: "err", text: "❌ 연결 끊김 (로컬 모드)" }));
     return () => unsubscribe();
   }, [cloudCode]);
+
+  // 🔑 배지를 누르면 방 코드를 직접 입력해요. 회사 컴퓨터처럼 처음 쓰는 브라우저에서도 주소에 ?room= 안 붙여도 돼요.
+  function changeCloudCode() {
+    const input = window.prompt("동기화 코드(방 번호)를 입력해요.\n다른 기기와 같은 코드를 넣으면 같은 데이터를 봐요.\n비우고 확인을 누르면 연동을 끊어요.", cloudCode);
+    if (input === null) return;
+    const next = input.trim();
+    if (next === cloudCode) return;
+    if (!next && !window.confirm("연동을 끊고 이 기기에서만 쓸까요?")) return;
+    save("jjanto_cloud_code", next);
+    // 주소에 예전 ?room=이 남아 있으면 새로고침할 때 다시 그 방으로 돌아가니까 지워요
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("room")) { url.searchParams.delete("room"); window.history.replaceState(null, "", url); }
+    setCloudStatus(null);
+    setCloudCode(next);
+  }
 
   function triggerAutoSave() {
     if (!cloudCode) return;
@@ -1467,9 +1482,9 @@ export default function App() {
   const stats = computeWeekStats(todos.weeklyTable, jj, wk, isRestDay);
 
   const cloudBadge = (
-    <div title={cloudStatus?.text} style={{display:"flex",alignItems:"center",gap:6,background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"5px 10px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:11,flexShrink:0}}>
-      {cloudCode?"☁️ 연동중":"⚠️ 로컬"}
-    </div>
+    <button onClick={changeCloudCode} title={(cloudStatus?.text ? cloudStatus.text + " · " : "") + "눌러서 동기화 코드 입력"} style={{display:"flex",alignItems:"center",gap:6,background:cloudCode?"#E8F5E9":"#FFF0F0",border:cloudCode?"1.5px solid #A5D6A7":"1.5px solid #FFB3B3",borderRadius:10,padding:"5px 10px",color:cloudCode?"#2E7D32":"#C62828",fontWeight:800,fontSize:11,flexShrink:0,cursor:"pointer",fontFamily:"inherit"}}>
+      {cloudCode?"☁️ 연동중":"⚠️ 로컬 · 코드 입력"}
+    </button>
   );
 
   const TABS = [
