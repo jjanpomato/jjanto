@@ -75,6 +75,7 @@
     if (i === last) return; last = i;
     $('introWho').textContent = lines[i][1]; $('introLine').textContent = lines[i][2];
     $('introGo').hidden = t < END;
+    $('introTap').hidden = t >= END;
   }
   function lerp(a, b, k){ return a + (b - a) * Math.max(0, Math.min(1, k)); }
   var rising = [];
@@ -150,6 +151,12 @@
     t0 = 0; raf = requestAnimationFrame(loop);
   }
   function stop(){ cancelAnimationFrame(raf); raf = 0; boom.hidden = true; }
-  // 화면을 누르면 애니메이션을 끝까지 넘겨요
-  cv.addEventListener('click', function(){ if (raf) t0 = performance.now() - END * SLOW; });
+  // 가만히 두면 자동으로 흘러가고, 그림이나 대사창을 누르면 다음 대사 장면으로 바로 넘어가요
+  function next(){
+    if (!raf) return;
+    var t = (performance.now() - t0) / SLOW;
+    for (var i = 0; i < lines.length; i++) if (lines[i][0] > t) { t0 = performance.now() - lines[i][0] * SLOW; return; }
+  }
+  cv.parentNode.addEventListener('click', next);
+  $('introTalk').addEventListener('click', next);
 })();

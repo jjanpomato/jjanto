@@ -144,12 +144,15 @@ html.intro body{overflow:hidden}
 .start-btns{display:flex;flex-direction:column;gap:10px;align-items:stretch}
 .start-btns .btn{justify-content:center}
 .big-skip{font-size:17px;padding:10px 14px}
+#stPlay .scene,.talk{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.talk{display:flex;flex-direction:column;align-items:flex-start}
+.tap{align-self:flex-end;font-family:var(--f-display);font-size:14px;color:#5b3fb8;animation:blink 1s steps(2) infinite}
 .choices{align-items:center}
 .go-hint{font-family:var(--f-display);font-size:16px;color:#5b3fb8;animation:nudge 1s ease-in-out infinite}
 @keyframes nudge{50%{transform:translateX(-4px)}}
 .blink{animation:blink 1s steps(2) infinite}
 .replay{align-self:center;font:inherit;font-family:var(--f-body);font-size:14px;color:var(--mute);background:transparent;border:0;text-decoration:underline;cursor:pointer}
-@media (prefers-reduced-motion:reduce){.blink,.go-hint{animation:none}.intro-ov.bye{transition:none}}
+@media (prefers-reduced-motion:reduce){.blink,.go-hint,.tap{animation:none}.intro-ov.bye{transition:none}}
 
 /* "쿵!" 글자는 캔버스가 아니라 화면 글자로 띄워서 선명하게 */
 .boom{position:absolute;left:50%;top:30%;z-index:1;transform:translate(-50%,-50%);font-family:var(--f-display);font-size:clamp(30px,10vw,42px);line-height:1;color:#ff6b88;pointer-events:none;animation:boom .35s steps(3) both;
@@ -262,7 +265,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
       <section class="win">
         <div class="win-h"><span>NPC TALK</span></div>
         <div class="win-b">
-          <div><span class="who" id="introWho">나레이션</span><p class="line" id="introLine" aria-live="polite"></p></div>
+          <div class="talk" id="introTalk"><span class="who" id="introWho">나레이션</span><p class="line" id="introLine" aria-live="polite"></p><span class="tap" id="introTap">▼ 누르면 다음</span></div>
           <div class="choices" id="introGo" hidden><button class="btn" id="introJoin" type="button">좋아, 같이 갈래!</button><span class="go-hint">← 청첩장 보러가기</span></div>
         </div>
       </section>
