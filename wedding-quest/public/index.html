@@ -8,6 +8,11 @@
 <meta property="og:title" content="민수와 상현의 결혼 퀘스트">
 <meta property="og:description" content="2028.02.12 SAT · 비렌티 (천안)">
 <title>민수와 상현의 결혼 퀘스트</title>
+<script>
+/* 처음 온 하객에게만 프롤로그를 보여줘요 (한 번 클리어하거나 스킵하면 다음부터는 바로 청첩장) */
+try { if (!localStorage.getItem('wq_intro_done')) document.documentElement.classList.add('intro'); }
+catch (e) { document.documentElement.classList.add('intro'); }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
@@ -119,6 +124,37 @@ footer{text-align:center;font-family:var(--f-pixel);font-size:11px;letter-spacin
 .announce h3 small{font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:#fff;background:var(--rose);border:2px solid var(--ink);padding:0 6px}
 .ranks .win-name{font-family:var(--f-display);color:#c23b4a}
 
+/* Prologue overlay */
+.intro-ov{display:none;position:fixed;inset:0;z-index:30;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,var(--sky2) 100%);overflow-y:auto;overscroll-behavior:contain}
+html.intro .intro-ov{display:block}
+html.intro body{overflow:hidden}
+.intro-ov.bye{opacity:0;transition:opacity .5s}
+.intro-in{max-width:440px;min-height:100%;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+.intro-hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
+.intro-skip{font:inherit;font-family:var(--f-body);font-size:13px;color:#fff;background:transparent;border:2px dashed #fff;border-radius:20px;padding:2px 12px;cursor:pointer;letter-spacing:0}
+.intro-skip:focus-visible,.intro-ov .btn:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.stage{display:flex;flex-direction:column;gap:16px}
+.logo{text-align:center;font-family:var(--f-display);font-size:clamp(34px,11vw,46px);line-height:1.05;color:#fff;margin:18px 0 4px;
+  text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink),0 6px 0 rgba(43,33,64,.35)}
+.logo small{display:block;font-family:var(--f-pixel);font-size:12px;letter-spacing:.2em;color:var(--ink);text-shadow:none;margin-bottom:8px}
+.party{display:flex;gap:10px}
+.party .mem{flex:1;min-width:0;background:#fff;border:2px solid var(--ink);border-radius:4px;padding:6px;display:flex;gap:8px;align-items:center}
+.party canvas{flex:none;width:48px;height:auto;image-rendering:pixelated;background:linear-gradient(180deg,#d9ccff,#f4efff);border:2px solid var(--ink);border-radius:3px}
+.party b{display:block;font-family:var(--f-display);font-weight:400;font-size:15px}
+.party span{font-size:12px;color:var(--mute)}
+.start-btns{display:flex;flex-direction:column;gap:10px;align-items:stretch}
+.start-btns .btn{justify-content:center}
+.blink{animation:blink 1s steps(2) infinite}
+.quiz-in{font:inherit;font-family:var(--f-pixel);font-size:26px;letter-spacing:.35em;text-align:center;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:4px;padding:8px 0 8px .35em;width:100%}
+.quiz-in:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.quiz-in.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.quiz-msg{margin:0;min-height:1.6em;font-size:14px;text-align:center}
+.quiz-msg.no{color:#c23b4a} .quiz-msg.ok{color:#2e8a3c;font-family:var(--f-display);font-size:17px}
+.hint{margin:0;font-size:14px;background:#fff6d6;border:2px solid var(--ink);border-radius:4px;padding:6px 10px;text-align:center}
+.replay{align-self:center;font:inherit;font-family:var(--f-body);font-size:12px;color:var(--mute);background:transparent;border:0;text-decoration:underline;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.blink,.quiz-in.shake{animation:none}.intro-ov.bye{transition:none}}
+
 /* Event guide */
 .guide{border:2px dashed var(--ink);border-radius:4px;background:#fff;padding:8px 10px;font-size:14px}
 .guide b{font-family:var(--f-display);font-weight:400}
@@ -161,6 +197,57 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
 </style>
 </head>
 <body>
+<div class="intro-ov" id="intro" role="dialog" aria-modal="true" aria-label="웨딩 퀘스트 프롤로그">
+  <div class="intro-in">
+    <div class="intro-hud"><span id="introStep">PROLOGUE</span><button class="intro-skip" id="introSkip" type="button">스킵하고 청첩장 보기 ▸</button></div>
+
+    <div class="stage" id="stTitle">
+      <h1 class="logo"><small>WEDDING QUEST</small>민수 <span style="color:var(--rose)">♥</span> 상현</h1>
+      <section class="win">
+        <div class="win-h"><span>STORY</span><span class="ko">줄거리</span></div>
+        <div class="win-b">
+          <p style="margin:0">서로 다른 마을에서 홀로 모험하던 <b>도적 민수</b>와 <b>마법사 상현</b>.<br>어느 날 좁은 길모퉁이에서 둘은 그만 <b>“쿵!”</b> 부딪히고 마는데…</p>
+          <p style="margin:0">두 사람의 마지막 퀘스트를 함께 깨 줄 동료를 찾고 있어요!</p>
+          <div class="party">
+            <div class="mem"><canvas id="pfThief" width="16" height="20" aria-hidden="true"></canvas><div><b>민수</b><span>LV.?? 도적</span></div></div>
+            <div class="mem"><canvas id="pfMage" width="16" height="23" aria-hidden="true"></canvas><div><b>상현</b><span>LV.?? 마법사</span></div></div>
+          </div>
+        </div>
+      </section>
+      <div class="start-btns">
+        <button class="btn" id="introStart" type="button"><span class="blink">▶</span> 모험 시작</button>
+      </div>
+    </div>
+
+    <div class="stage" id="stPlay" hidden>
+      <div class="scene"><canvas id="introCv" width="160" height="110" aria-label="도적 민수와 마법사 상현이 길에서 부딪힌 뒤 눈이 맞아 웨딩 옷으로 변신하는 장면"></canvas></div>
+      <section class="win">
+        <div class="win-h"><span>NPC TALK</span></div>
+        <div class="win-b">
+          <div><span class="who" id="introWho">나레이션</span><p class="line" id="introLine" aria-live="polite"></p></div>
+          <div class="choices" id="introGo" hidden><button class="btn" id="introJoin" type="button">좋아, 같이 갈래!</button></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stage" id="stQuiz" hidden>
+      <section class="win">
+        <div class="win-h"><span>QUEST</span><span class="ko">입장 퀴즈</span><span class="x">?</span></div>
+        <div class="win-b">
+          <h2 class="qname"><small>FIRST QUEST</small>상현이와 민수의 결혼 날짜는?</h2>
+          <form id="quizForm" novalidate style="display:flex;flex-direction:column;gap:10px">
+            <label class="note" for="quizIn">숫자 6자리로 적어 주세요 (연도 끝 2자리 + 월 + 일)</label>
+            <input class="quiz-in" id="quizIn" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="______">
+            <p class="quiz-msg" id="quizMsg" role="status"></p>
+            <p class="hint" id="quizHint" hidden>💡 힌트: 2028년 2월 12일 토요일이에요!</p>
+            <button class="btn" type="submit" id="quizBtn" style="justify-content:center">정답 제출</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <div class="hud"><span>WEDDING QUEST</span><span>결혼식까지 <span class="dday" id="dday">D-?</span></span></div>
 
@@ -292,6 +379,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     </div>
   </section>
 
+  <button class="replay" id="replayIntro" type="button">↺ 프롤로그 다시 보기</button>
   <footer>MINSU ♥ SANGHYUN · NEW GAME START</footer>
 </div>
 
@@ -368,15 +456,16 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
   var heart = [".oo.oo.","orrorro","orrrrro",".orrro.","..oro..","...o..."];
   var clouds = [{x:10,y:40,s:1},{x:95,y:30,s:1},{x:135,y:48,s:0}];
   var petals = []; for (var i=0;i<9;i++) petals.push({x:Math.random()*W,y:Math.random()*GY,v:.12+Math.random()*.15,p:Math.random()*6});
-  function cloud(x,y,big){
+  function cloud(g,x,y,big){
     g.fillStyle='#ffffff';
     var w=big?22:16; g.fillRect(x,y,w,4); g.fillRect(x+3,y-3,w-8,3); g.fillRect(x+6,y-5,6,2);
     g.fillStyle='#e4dcfb'; g.fillRect(x,y+3,w,1);
   }
-  function frame(t){
+  /* Background, shared with the prologue (intro.js) */
+  function world(g,t){
     var sky=g.createLinearGradient(0,0,0,GY); sky.addColorStop(0,'#a993ee'); sky.addColorStop(1,'#eee6ff');
     g.fillStyle=sky; g.fillRect(0,0,W,H);
-    clouds.forEach(function(c){ var x = ((c.x + t*0.004*(c.s?1:0.6)) % (W+30)) - 25; cloud(Math.round(x),c.y,c.s); });
+    clouds.forEach(function(c){ var x = ((c.x + t*0.004*(c.s?1:0.6)) % (W+30)) - 25; cloud(g,Math.round(x),c.y,c.s); });
     /* stepped hills */
     g.fillStyle='#9fdc8c';
     [[0,78,40],[8,74,24],[14,71,12],[110,76,50],[118,72,30],[126,69,14]].forEach(function(r){g.fillRect(r[0],r[1],r[2],GY-r[1]);});
@@ -390,6 +479,9 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     [[20,'#c9a7ff'],[34,'#ffffff'],[118,'#b18cf5'],[134,'#ffffff'],[146,'#c9a7ff'],[8,'#ff9fbd']].forEach(function(f){
       g.fillStyle='#3e9a34'; g.fillRect(f[0],GY-2,1,2); g.fillStyle=f[1]; g.fillRect(f[0]-1,GY-4,3,1); g.fillRect(f[0],GY-5,1,3);
     });
+  }
+  function frame(t){
+    world(g,t);
     /* characters */
     var bob = reduce?0:Math.round((Math.sin(t/420)+1)/2);
     var bob2 = reduce?0:Math.round((Math.sin(t/420+1.6)+1)/2);
@@ -403,6 +495,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     if(!reduce){ petals.forEach(function(p){ p.y+=p.v; p.p+=.02; if(p.y>GY){p.y=-2;p.x=Math.random()*W;} g.fillStyle=(p.p|0)%2?'#ffffff':'#d6c2ff'; g.fillRect(Math.round(p.x+Math.sin(p.p)*3),Math.round(p.y),2,1); }); }
   }
   if (reduce) frame(0); else (function loop(t){frame(t||0);requestAnimationFrame(loop);})();
+  window.WQ = {drawSprite:drawSprite, world:world, groom:groom, bride:bride, base:base, PB:PB, PG:PG, heart:heart, reduce:reduce, W:W, H:H, GY:GY};
 
   /* Portrait */
   var pc = document.getElementById('portrait').getContext('2d');
@@ -452,7 +545,9 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
   document.getElementById('yes').addEventListener('click',function(){choose('yes');});
   document.getElementById('no').addEventListener('click',function(){choose('no');});
   document.getElementById('skip').addEventListener('click',function(){ document.getElementById('quest').scrollIntoView({behavior:reduce?'auto':'smooth'}); });
-  show(script[0]);
+  /* 프롤로그를 보는 중이면, 프롤로그가 끝난 뒤에 대화를 시작해요 */
+  if (document.documentElement.classList.contains('intro')) window.addEventListener('wq:introdone', function(){ show(script[0]); }, {once:true});
+  else show(script[0]);
 
   /* Toast + copy */
   var tEl=document.getElementById('toast'), tT;
@@ -467,6 +562,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
   });
 })();
 </script>
+<script src="/intro.js"></script>
 <script src="/guest.js" defer></script>
 </body>
 </html>
