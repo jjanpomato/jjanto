@@ -9,9 +9,8 @@
 <meta property="og:description" content="2028.02.12 SAT · 비렌티 (천안)">
 <title>민수와 상현의 결혼 퀘스트</title>
 <script>
-/* 처음 온 하객에게만 프롤로그를 보여줘요 (한 번 클리어하거나 스킵하면 다음부터는 바로 청첩장). 주소에 ?intro 를 붙이면 항상 보여줘요 */
-try { if (/[?&]intro\b/.test(location.search) || !localStorage.getItem('wq_intro_done')) document.documentElement.classList.add('intro'); }
-catch (e) { document.documentElement.classList.add('intro'); }
+/* 청첩장은 항상 프롤로그부터 시작해요 (스킵 버튼으로 바로 넘어갈 수 있어요) */
+document.documentElement.classList.add('intro');
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -42,7 +42,6 @@
   }
   var announced = false;
   function done(){
-    try { localStorage.setItem('wq_intro_done', '1'); } catch (e) {}
     stop();
     ov.classList.add('bye');
     setTimeout(function(){
