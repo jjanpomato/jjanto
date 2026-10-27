@@ -1,13 +1,13 @@
 /* 배경음악: 브라우저에서 바로 연주하는 8비트 BGM 두 곡 (음악 파일 없음, 직접 작곡한 곡)
    - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 웨딩 왈츠가 나와요
    - 휴대폰은 화면을 한 번 눌러야 소리가 나서, 첫 터치(모험 시작·청첩장 바로 보기 등) 때 시작해요
-   - 오른쪽 아래 ♪ 버튼으로 끄고 켤 수 있고, 끈 상태는 그 기기에 기억해요
+   - 오른쪽 아래 ♪ 버튼으로 끄고 켤 수 있어요 (새로고침하면 다시 켜진 상태로 시작해요)
    - 나중에 MP3로 바꾸려면 public/에 파일을 넣고 아래 곡의 src에 경로를 적으면 돼요 (예: '/bgm.mp3') */
 (function(){
-  var VOL = 0.4, KEY = 'wq_bgm_off', FADE = 0.6;
+  var VOL = 0.4, FADE = 0.6;
   var root = document.documentElement, btn = document.getElementById('bgmBtn');
   if (!btn) return;
-  function store(v){ try { if (v === undefined) return localStorage.getItem(KEY); if (v) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY); } catch (e) { return null; } }
+  try { localStorage.removeItem('wq_bgm_off'); } catch (e) {} // 예전 버전이 기억해 둔 '꺼짐'은 지워요
 
   /* ===== 악보 =====
      8분음표 = 1칸, 한 마디 = 8칸, 16마디가 반복돼요. 음 이름 뒤 숫자는 칸 수, '.'은 쉼표, b는 플랫 */
@@ -204,29 +204,32 @@
     swap = setTimeout(function(){ if (playing) begin(); }, FADE * 1000 + 100);
   }).observe(root, { attributes: true, attributeFilter: ['class'] });
 
+  // 버튼은 '켜 둔 상태'(on)를 보여줘요. 기본은 켜짐이라 화면을 누르기 전에도 ♪가 켜져 보여요
+  var on = true, touched = false;
   function render(){
-    btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
-    btn.setAttribute('aria-label', playing ? '배경음악 끄기' : '배경음악 켜기');
-    btn.classList.toggle('off', !playing);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('aria-label', on ? '배경음악 끄기' : '배경음악 켜기');
+    btn.classList.toggle('off', !on);
   }
   btn.addEventListener('click', function(e){
-    e.stopPropagation();
-    if (playing) { stop(); store(true); } else { store(false); start(); }
+    e.stopPropagation(); touched = true;
+    on = !on; render();
+    if (on) wake(); else stop();
   });
-  // 첫 터치 때 시작 (예전에 꺼 둔 기기라면 그대로 꺼 둬요)
-  function first(e){
-    if (btn.contains(e.target)) return; // ♪ 버튼을 먼저 누른 경우는 버튼이 알아서 처리해요
-    document.removeEventListener('click', first, true);
-    document.removeEventListener('touchend', first, true);
-    if (!store()) start();
+  function wake(){
+    start();
+    if (ctx && ctx.state !== 'running') ctx.resume();
   }
-  document.addEventListener('click', first, true);
-  document.addEventListener('touchend', first, true);
-  // 다른 앱으로 가거나 화면이 꺼지면 잠깐 멈춰요
-  var paused = false;
+  // 화면을 누를 때마다 확인해요: 스크롤처럼 소리를 못 켜는 터치였다면 다음 터치에서 다시 시도해요
+  function gesture(e){
+    if (btn.contains(e.target) || !on || document.hidden) return; // ♪ 버튼은 버튼이 알아서 처리해요
+    touched = true; wake();
+  }
+  ['click', 'touchend', 'keydown'].forEach(function(t){ document.addEventListener(t, gesture, true); });
+  // 다른 앱으로 가거나 화면이 꺼지면 잠깐 멈추고, 돌아오면 이어서 틀어요
   document.addEventListener('visibilitychange', function(){
-    if (document.hidden) { if (playing) { paused = true; stop(); } }
-    else if (paused) { paused = false; start(); }
+    if (document.hidden) stop();
+    else if (on && touched) wake();
   });
   render();
 
