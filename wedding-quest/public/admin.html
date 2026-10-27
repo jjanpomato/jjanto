@@ -62,6 +62,27 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
 [hidden]{display:none!important}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(43,33,64,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s}
 .toast.show{opacity:1;transform:translate(-50%,0)}
+.sum{display:flex;gap:8px;flex-wrap:wrap}
+.sum div{flex:1;min-width:120px;border:2px solid var(--ink);border-radius:4px;background:#fff;padding:6px 10px}
+.sum b{display:block;font-family:var(--f-display);font-weight:400;font-size:22px;line-height:1.2}
+.sum span{font-size:12px;color:var(--mute)}
+.tbl{overflow-x:auto;border:2px solid var(--ink);border-radius:4px;background:#fff}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+.tbl th,.tbl td{padding:5px 8px;border-bottom:1px dotted var(--paper2);text-align:left}
+.tbl th{font-family:var(--f-display);font-weight:400;color:var(--mute);background:var(--paper2)}
+.tbl tr.no td{color:var(--mute)}
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.gcard{border:2px solid var(--ink);border-radius:4px;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.gcard img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;border-bottom:2px solid var(--ink);background:var(--paper2)}
+.gcard .row{padding:4px;gap:4px;justify-content:space-between}
+.gcard .pos{font-family:var(--f-pixel);font-size:10px;color:var(--mute)}
+#galPick{align-self:flex-start;cursor:pointer}
+.accf{display:flex;flex-direction:column;gap:8px}
+.accf>b{font-family:var(--f-display);font-weight:400}
+.accrows{display:flex;flex-direction:column;gap:6px}
+.accrow{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:6px}
+#app .accrow input{font-size:14px;padding:6px 8px}
+@media (max-width:520px){.accrow{grid-template-columns:1fr 1fr}.accrow input:last-child{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -81,6 +102,40 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
   </section>
 
   <div id="app" hidden>
+    <section class="win">
+      <div class="win-h"><span>RSVP</span><span class="ko">참석 여부</span><span class="n" id="rsvpCount"></span></div>
+      <div class="win-b">
+        <div class="sum" id="rsvpSum"></div>
+        <div class="row"><button class="btn sm alt" id="rsvpCsv" type="button">⬇ 엑셀(CSV)로 받기</button></div>
+        <div class="tbl"><table><thead><tr><th>성함</th><th>구분</th><th>참석</th><th>인원</th><th>식사</th><th>날짜</th><th></th></tr></thead><tbody id="rsvpRows"></tbody></table></div>
+        <p class="empty" id="rsvpEmpty" hidden>아직 응답이 없어요.</p>
+      </div>
+    </section>
+
+    <section class="win">
+      <div class="win-h"><span>GALLERY</span><span class="ko">우리 사진 (STEP 4)</span><span class="n" id="galCount"></span></div>
+      <div class="win-b">
+        <p class="note">사진을 고르면 자동으로 줄여서 올려요(긴 변 2000px). 화살표로 순서를 바꿀 수 있어요. 최대 15장.</p>
+        <label class="btn" id="galPick">📷 사진 추가하기<input id="galFile" type="file" accept="image/*" multiple hidden></label>
+        <p class="note" id="galStatus" hidden></p>
+        <div class="ggrid" id="galGrid"></div>
+      </div>
+    </section>
+
+    <section class="win">
+      <div class="win-h"><span>INVENTORY</span><span class="ko">마음 전하실 곳 (계좌)</span></div>
+      <div class="win-b">
+        <form id="accForm" class="accf">
+          <b>신랑측</b>
+          <div class="accrows" data-side="groom"></div>
+          <b>신부측</b>
+          <div class="accrows" data-side="bride"></div>
+          <p class="note">한쪽에 최대 3줄. 비워 둔 줄은 저장되지 않아요. 예) 신랑 민수 / 국민은행 / 123-456-789</p>
+          <button class="btn" type="submit" id="accSave">계좌 저장</button>
+        </form>
+      </div>
+    </section>
+
     <section class="win">
       <div class="win-h"><span>OPEN CHAT</span><span class="ko">카카오톡 오픈채팅 링크</span></div>
       <div class="win-b">
@@ -182,6 +237,9 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
     $('publish').disabled = !st.published && st.winners.length === 0;
     $('pubHint').textContent = !st.published && st.winners.length === 0 ? '먼저 당첨자 이름을 저장해 주세요.' : '';
 
+    renderRsvp(s.rsvp); renderGallery(s.gallery);
+    if (!accDirty) fillAccounts(st.accounts || { groom: [], bride: [] });
+
     var gb = $('gb'); gb.textContent = '';
     $('gbCount').textContent = s.guestbook.length + '개';
     $('gbEmpty').hidden = s.guestbook.length > 0;
@@ -194,6 +252,123 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
       li.appendChild(del); gb.appendChild(li);
     });
   }
+
+  /* ===== 참석 여부 ===== */
+  var SIDE = { groom: '신랑측', bride: '신부측' }, MEAL = { yes: 'O', no: 'X', unsure: '미정' };
+  function renderRsvp(list){
+    var yes = list.filter(function(r){ return r.attend === 'yes'; });
+    function sum(side){ return yes.filter(function(r){ return !side || r.side === side; }).reduce(function(a, r){ return a + r.count; }, 0); }
+    var meals = yes.filter(function(r){ return r.meal !== 'no'; }).reduce(function(a, r){ return a + r.count; }, 0);
+    var box = $('rsvpSum'); box.textContent = '';
+    [[sum() + '명', '참석 예정 인원'], [sum('groom') + '명', '신랑측'], [sum('bride') + '명', '신부측'], [meals + '명', '식사(미정 포함)'], [(list.length - yes.length) + '건', '불참 응답']].forEach(function(c){
+      var d = el('div'); d.appendChild(el('b', null, c[0])); d.appendChild(el('span', null, c[1])); box.appendChild(d);
+    });
+    $('rsvpCount').textContent = list.length + '건';
+    $('rsvpEmpty').hidden = list.length > 0;
+    var tb = $('rsvpRows'); tb.textContent = '';
+    list.forEach(function(r){
+      var tr = el('tr', r.attend === 'yes' ? '' : 'no');
+      [r.name, SIDE[r.side], r.attend === 'yes' ? '참석' : '불참', r.attend === 'yes' ? r.count : '-', r.attend === 'yes' ? MEAL[r.meal] : '-', fmt(r.at)].forEach(function(v){ tr.appendChild(el('td', null, String(v))); });
+      var td = el('td'), del = el('button', 'btn sm danger', '삭제'); del.type = 'button';
+      del.addEventListener('click', function(){ if (confirm(r.name + '님의 응답을 삭제할까요?')) act({ action: 'deleteRsvp', id: r.id }, del); });
+      td.appendChild(del); tr.appendChild(td); tb.appendChild(tr);
+    });
+  }
+  $('rsvpCsv').addEventListener('click', function(){
+    if (!state) return;
+    var rows = [['성함', '구분', '참석', '인원', '식사', '응답일시']].concat(state.rsvp.map(function(r){
+      return [r.name, SIDE[r.side], r.attend === 'yes' ? '참석' : '불참', r.attend === 'yes' ? r.count : 0, r.attend === 'yes' ? MEAL[r.meal] : '-', new Date(r.at).toLocaleString('ko-KR')];
+    }));
+    var csv = '\ufeff' + rows.map(function(r){ return r.map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var a = el('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = '참석여부.csv';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+
+  /* ===== 갤러리 ===== */
+  function renderGallery(list){
+    $('galCount').textContent = list.length + '/15';
+    var g = $('galGrid'); g.textContent = '';
+    list.forEach(function(p, i){
+      var c = el('div', 'gcard'), img = el('img'); img.src = '/api/img?s=t&id=' + encodeURIComponent(p.id); img.alt = '사진 ' + (i + 1); img.loading = 'lazy';
+      c.appendChild(img);
+      var row = el('div', 'row');
+      var up = el('button', 'btn sm alt', '◀'); up.type = 'button'; up.disabled = i === 0; up.setAttribute('aria-label', '앞으로');
+      up.addEventListener('click', function(){ act({ action: 'movePhoto', id: p.id, dir: -1 }, up); });
+      var dn = el('button', 'btn sm alt', '▶'); dn.type = 'button'; dn.disabled = i === list.length - 1; dn.setAttribute('aria-label', '뒤로');
+      dn.addEventListener('click', function(){ act({ action: 'movePhoto', id: p.id, dir: 1 }, dn); });
+      var del = el('button', 'btn sm danger', '삭제'); del.type = 'button';
+      del.addEventListener('click', function(){ if (confirm((i + 1) + '번째 사진을 삭제할까요?')) act({ action: 'deletePhoto', id: p.id }, del); });
+      row.appendChild(up); row.appendChild(el('span', 'pos', String(i + 1))); row.appendChild(dn); row.appendChild(del);
+      c.appendChild(row); g.appendChild(c);
+    });
+    $('galPick').hidden = list.length >= 15;
+  }
+  // 브라우저에서 크기 줄이기: 큰 사진(긴 변 2000px)과 썸네일(긴 변 600px)
+  function loadImage(file){
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){ URL.revokeObjectURL(url); res(img); };
+      img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error('이 사진은 열 수 없어요(JPG/PNG로 골라 주세요).')); };
+      img.src = url;
+    });
+  }
+  function resize(img, max, q){
+    var w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+    var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+    return new Promise(function(res){ c.toBlob(function(b){ res({ blob: b, w: c.width, h: c.height }); }, 'image/jpeg', q); });
+  }
+  $('galFile').addEventListener('change', function(){
+    var files = Array.prototype.slice.call(this.files || []); this.value = '';
+    var room = 15 - state.gallery.length, st = $('galStatus');
+    if (files.length > room) { toast('최대 15장이라 ' + room + '장만 올릴게요.'); files = files.slice(0, room); }
+    if (!files.length) return;
+    var done = 0, failed = 0; st.hidden = false;
+    (function next(){
+      var f = files.shift();
+      if (!f) {
+        st.textContent = done + '장 올렸어요' + (failed ? ' · ' + failed + '장 실패' : '') + '.';
+        return act(null);
+      }
+      st.textContent = '올리는 중… (' + (done + failed + 1) + '/' + (done + failed + 1 + files.length) + ')';
+      loadImage(f).then(function(img){ return Promise.all([resize(img, 2000, 0.88), resize(img, 600, 0.82)]); })
+        .then(function(r){
+          var fd = new FormData(); fd.append('full', r[0].blob, 'f.jpg'); fd.append('thumb', r[1].blob, 't.jpg'); fd.append('w', r[0].w); fd.append('h', r[0].h);
+          return fetch('/api/admin/gallery', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd })
+            .then(function(x){ return x.json().catch(function(){ return {}; }).then(function(b){ if (!x.ok) throw new Error(b.error || '업로드 실패'); }); });
+        })
+        .then(function(){ done++; }, function(e){ failed++; toast(e.message); })
+        .then(next);
+    })();
+  });
+
+  /* ===== 계좌 ===== */
+  var accDirty = false;
+  function fillAccounts(acc){
+    document.querySelectorAll('.accrows').forEach(function(box){
+      var rows = acc[box.getAttribute('data-side')] || []; box.textContent = '';
+      for (var i = 0; i < 3; i++) {
+        var r = rows[i] || {}, line = el('div', 'accrow');
+        [['who', '이름 (예: 신랑 민수)', 20], ['bank', '은행', 20], ['number', '계좌번호', 40]].forEach(function(f){
+          var inp = el('input'); inp.name = f[0]; inp.placeholder = f[1]; inp.maxLength = f[2]; inp.value = r[f[0]] || '';
+          inp.addEventListener('input', function(){ accDirty = true; });
+          line.appendChild(inp);
+        });
+        box.appendChild(line);
+      }
+    });
+  }
+  $('accForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var acc = {};
+    document.querySelectorAll('.accrows').forEach(function(box){
+      acc[box.getAttribute('data-side')] = Array.prototype.map.call(box.children, function(line){
+        return { who: line.children[0].value, bank: line.children[1].value, number: line.children[2].value };
+      });
+    });
+    accDirty = false;
+    act({ action: 'setAccounts', accounts: acc }, $('accSave')).then(function(ok){ if (ok) toast('계좌를 저장했어요.'); else accDirty = true; });
+  });
 
   function enter(){
     $('loginBox').hidden = true; $('app').hidden = false; $('logout').hidden = false;

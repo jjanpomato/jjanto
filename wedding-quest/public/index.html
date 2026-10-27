@@ -52,22 +52,16 @@ body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,
 .win-h .x{margin-left:auto;width:14px;height:14px;border:2px solid #fff;display:grid;place-items:center;font-size:9px;line-height:1}
 .win-b{padding:14px;display:flex;flex-direction:column;gap:12px}
 
-/* Dialogue */
-.dlg{cursor:pointer;user-select:none}
-.dlg .row{display:flex;gap:12px;align-items:flex-start}
-.portrait{flex:none;width:64px;height:64px;border:3px solid var(--ink);border-radius:4px;background:linear-gradient(180deg,#d9ccff,#f4efff);image-rendering:pixelated}
-.speech{min-width:0;flex:1}
+/* Dialogue text (prologue) */
 .who{display:inline-block;font-family:var(--f-display);font-size:14px;background:var(--ink);color:#fff;padding:0 8px;border-radius:3px;margin-bottom:4px}
 .line{margin:0;font-size:16px;min-height:3.2em;white-space:pre-line}
-.next{align-self:flex-end;font-family:var(--f-pixel);font-size:11px;color:var(--mute);animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}
 .choices{display:flex;gap:8px;flex-wrap:wrap}
 .btn{font:inherit;font-family:var(--f-display);font-size:15px;color:var(--ink);background:var(--gold);border:3px solid var(--ink);border-radius:4px;padding:6px 14px;box-shadow:inset -3px -3px 0 var(--gold-d),0 3px 0 var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn:active{transform:translateY(2px);box-shadow:inset -3px -3px 0 var(--gold-d),0 1px 0 var(--ink)}
-.btn:focus-visible,.skip:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.btn:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
 .btn.alt{background:#fff;box-shadow:inset -3px -3px 0 var(--paper2),0 3px 0 var(--ink)}
 .btn.sm{font-size:13px;padding:3px 10px}
-.skip{align-self:center;font-family:var(--f-body);font-size:13px;color:var(--ink);background:rgba(255,255,255,.7);border:2px dashed var(--ink);border-radius:20px;padding:4px 14px;cursor:pointer;margin-top:-6px}
 
 /* Quest */
 .qname{font-family:var(--f-display);font-size:20px;line-height:1.3;margin:0;text-wrap:balance}
@@ -102,7 +96,6 @@ body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,
 .acc .num b{display:block;font-size:14px}
 
 /* Screenshots */
-.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .shot{aspect-ratio:3/4;max-width:100%;border:2px solid var(--ink);border-radius:3px;background:repeating-linear-gradient(45deg,var(--paper2) 0 6px,#fff 6px 12px);display:grid;place-items:center;font-family:var(--f-pixel);font-size:10px;color:var(--mute);letter-spacing:.08em}
 
 .ranks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -114,7 +107,7 @@ footer{text-align:center;font-family:var(--f-pixel);font-size:11px;letter-spacin
 
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(43,33,64,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s;z-index:20}
 .toast.show{opacity:1;transform:translate(-50%,0)}
-@media (prefers-reduced-motion:reduce){.next{animation:none}.toast{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
 
 [hidden]{display:none!important}
 
@@ -154,6 +147,43 @@ html.intro body{overflow:hidden}
 .hint{margin:0;font-size:14px;background:#fff6d6;border:2px solid var(--ink);border-radius:4px;padding:6px 10px;text-align:center}
 .replay{align-self:center;font:inherit;font-family:var(--f-body);font-size:12px;color:var(--mute);background:transparent;border:0;text-decoration:underline;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.blink,.quiz-in.shake{animation:none}.intro-ov.bye{transition:none}}
+
+/* Main quest log */
+.qname.big{font-size:26px}
+.qlog{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.qlog a{display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--ink);border-radius:4px;padding:6px 10px;color:var(--ink);text-decoration:none;font-size:15px}
+.qlog a:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.qlog .st{flex:none;font-family:var(--f-pixel);font-size:10px;letter-spacing:.08em;color:#fff;background:var(--tab);border:2px solid var(--ink);padding:0 5px}
+.ck{flex:none;width:18px;height:18px;border:2px solid var(--ink);border-radius:2px;background:#fff;display:grid;place-items:center;font-style:normal;font-size:12px;line-height:1;color:#fff}
+.ck.done{background:var(--leaf)}
+.ck.done::after{content:"✓"}
+.qlog li:has(.ck.done) a{background:#f1fbe9}
+.qprog{margin:0;text-align:right;font-family:var(--f-pixel);font-size:11px;color:var(--mute)}
+.step{scroll-margin-top:12px}
+.mine{margin:0;font-size:14px;background:#f1fbe9;border:2px solid var(--ink);border-radius:4px;padding:6px 10px}
+
+/* Gallery */
+.gal{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gal button{padding:0;border:2px solid var(--ink);border-radius:3px;background:var(--paper2);aspect-ratio:3/4;overflow:hidden;cursor:pointer;display:block;min-width:0}
+.gal button:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.gal img{width:100%;height:100%;object-fit:cover;display:block}
+dialog.lb{width:min(560px,calc(100% - 16px))}
+.lb-b{position:relative;background:#1d1830;display:grid;place-items:center;min-height:200px}
+.lb-b img{display:block;max-width:100%;max-height:calc(100dvh - 120px);width:auto;height:auto}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border:2px solid var(--ink);border-radius:4px;background:rgba(255,255,255,.85);font-size:13px;cursor:pointer;color:var(--ink)}
+.lb-nav:focus-visible{outline:3px solid var(--rose)}
+.lb-nav.prev{left:6px}.lb-nav.next{right:6px}
+
+/* RSVP */
+.seg{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.seg legend{font-family:var(--f-display);font-size:14px;color:var(--mute);padding:0;margin-bottom:4px;width:100%}
+.seg label{position:relative}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:inline-block;background:#fff;border:2px solid var(--ink);border-radius:4px;padding:5px 12px;font-size:14px}
+.seg input:checked+span{background:var(--gold);box-shadow:inset -3px -3px 0 var(--gold-d)}
+.seg input:focus-visible+span{outline:3px solid var(--rose);outline-offset:2px}
+.when-yes{display:flex;flex-direction:column;gap:10px}
+.field select{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:2px solid var(--ink);border-radius:4px;padding:7px 10px;width:100%}
 
 /* Event guide */
 .guide{border:2px dashed var(--ink);border-radius:4px;background:#fff;padding:8px 10px;font-size:14px}
@@ -206,11 +236,11 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
       <section class="win">
         <div class="win-h"><span>STORY</span><span class="ko">줄거리</span></div>
         <div class="win-b">
-          <p style="margin:0">서로 다른 마을에서 홀로 모험하던 <b>도적 민수</b>와 <b>마법사 상현</b>.<br>어느 날 좁은 길모퉁이에서 둘은 그만 <b>“쿵!”</b> 부딪히고 마는데…</p>
+          <p style="margin:0">서로 다른 마을에서 홀로 모험하던 <b>민수</b>와 <b>상현</b>.<br>어느 날 좁은 길모퉁이에서 둘은 그만 <b>“쿵!”</b> 부딪히고 마는데…</p>
           <p style="margin:0">두 사람의 마지막 퀘스트를 함께 깨 줄 동료를 찾고 있어요!</p>
           <div class="party">
-            <div class="mem"><canvas id="pfThief" width="16" height="20" aria-hidden="true"></canvas><div><b>민수</b><span>LV.?? 도적</span></div></div>
-            <div class="mem"><canvas id="pfMage" width="16" height="23" aria-hidden="true"></canvas><div><b>상현</b><span>LV.?? 마법사</span></div></div>
+            <div class="mem"><canvas id="pfThief" width="16" height="20" aria-hidden="true"></canvas><div><b>민수</b><span>LV.96 도적</span></div></div>
+            <div class="mem"><canvas id="pfMage" width="16" height="23" aria-hidden="true"></canvas><div><b>상현</b><span>LV.97 마법사</span></div></div>
           </div>
         </div>
       </section>
@@ -220,7 +250,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     </div>
 
     <div class="stage" id="stPlay" hidden>
-      <div class="scene"><canvas id="introCv" width="160" height="110" aria-label="도적 민수와 마법사 상현이 길에서 부딪힌 뒤 눈이 맞아 웨딩 옷으로 변신하는 장면"></canvas></div>
+      <div class="scene"><canvas id="introCv" width="160" height="110" aria-label="민수와 상현이 길에서 부딪힌 뒤 눈이 맞아 웨딩 옷으로 변신하는 장면"></canvas></div>
       <section class="win">
         <div class="win-h"><span>NPC TALK</span></div>
         <div class="win-b">
@@ -257,26 +287,33 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     <span class="tag groom">민수</span><span class="tag bride">상현</span>
   </div>
 
-  <section class="win dlg" id="dlg" aria-live="polite">
-    <div class="win-h"><span>NPC TALK</span><span class="x">×</span></div>
-    <div class="win-b">
-      <div class="row">
-        <canvas class="portrait" id="portrait" width="32" height="32" aria-hidden="true"></canvas>
-        <div class="speech"><span class="who" id="who">상현</span><p class="line" id="line"></p></div>
-      </div>
-      <div class="choices" id="choices" hidden>
-        <button class="btn" id="yes" type="button">수락한다</button>
-        <button class="btn alt" id="no" type="button">조금 생각해볼게</button>
-      </div>
-      <span class="next" id="next">▼ 터치해서 계속</span>
-    </div>
-  </section>
-  <button class="skip" id="skip" type="button">대화 건너뛰고 정보 바로 보기 ▾</button>
-
   <section class="win" id="quest">
     <div class="win-h"><span>QUEST</span><span class="ko">퀘스트 알림</span><span class="x">!</span></div>
     <div class="win-b">
-      <h2 class="qname"><small>MAIN QUEST</small>민수와 상현의 결혼식에 참석하라</h2>
+      <h2 class="qname big"><small>MAIN QUEST</small>결혼식에 참석하라</h2>
+      <ol class="qlog" id="qlog">
+        <li><a href="#step1"><i class="ck" data-step="1"></i><span class="st">STEP 1</span>날짜·장소 확인하기</a></li>
+        <li><a href="#step2"><i class="ck" data-step="2"></i><span class="st">STEP 2</span>가는 방법 파악하기</a></li>
+        <li><a href="#step3"><i class="ck" data-step="3"></i><span class="st">STEP 3</span>참석 여부 알려주기</a></li>
+        <li><a href="#step4"><i class="ck" data-step="4"></i><span class="st">STEP 4</span>우리 사진 살펴보기</a></li>
+        <li><a href="#step5"><i class="ck" data-step="5"></i><span class="st">STEP 5</span>방명록 남겨주기</a></li>
+        <li><a href="#step6"><i class="ck" data-step="6"></i><span class="st">STEP 6</span>이벤트 참여하기</a></li>
+      </ol>
+      <p class="qprog" id="qprog">진행도 0/6</p>
+      <div>
+        <p class="note" style="margin-bottom:6px">완료 보상</p>
+        <div class="reward">
+          <span class="item"><i>🍽</i>맛있는 한 끼</span>
+          <span class="item"><i>♥</i>평생 감사 +∞</span>
+          <span class="item"><i>★</i>추억 스크린샷</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="win step" id="step1" data-step="1">
+    <div class="win-h"><span>STEP 1</span><span class="ko">날짜·장소 확인하기</span></div>
+    <div class="win-b">
       <dl class="stats">
         <dt>일시</dt><dd>2028년 2월 12일 토요일 오전 11시</dd>
         <dt>장소</dt><dd>비렌티 (천안) · 홀 이름 입력 예정</dd>
@@ -286,22 +323,14 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
         <div class="cal-h">2028 . 02</div>
         <div class="cal-g" id="cal"></div>
       </div>
-      <div>
-        <p class="note" style="margin-bottom:6px">완료 보상</p>
-        <div class="reward">
-          <span class="item"><i>🍽</i>맛있는 한 끼</span>
-          <span class="item"><i>♥</i>평생 감사 +∞</span>
-          <span class="item"><i>★</i>추억 스크린샷</span>
-        </div>
-      </div>
       <div class="btns">
         <a class="btn sm" id="gcal" target="_blank" rel="noopener">캘린더에 저장</a>
       </div>
     </div>
   </section>
 
-  <section class="win">
-    <div class="win-h"><span>WORLD MAP</span><span class="ko">오시는 길</span></div>
+  <section class="win step" id="step2" data-step="2">
+    <div class="win-h"><span>STEP 2</span><span class="ko">가는 방법 파악하기</span></div>
     <div class="win-b">
       <dl class="stats">
         <dt>주소</dt><dd>주소 입력 예정</dd>
@@ -314,56 +343,27 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     </div>
   </section>
 
-  <section class="win">
-    <div class="win-h"><span>INVENTORY</span><span class="ko">마음 전하실 곳</span></div>
+  <section class="win step" id="step3" data-step="3">
+    <div class="win-h"><span>STEP 3</span><span class="ko">참석 여부 알려주기</span></div>
     <div class="win-b">
-      <details class="acc">
-        <summary>신랑측</summary>
-        <ul>
-          <li><span class="num"><b>신랑 민수</b>○○은행 계좌번호 입력 예정</span><button class="btn sm alt copy" type="button" data-v="○○은행 계좌번호 입력 예정">복사</button></li>
-        </ul>
-      </details>
-      <details class="acc">
-        <summary>신부측</summary>
-        <ul>
-          <li><span class="num"><b>신부 상현</b>○○은행 계좌번호 입력 예정</span><button class="btn sm alt copy" type="button" data-v="○○은행 계좌번호 입력 예정">복사</button></li>
-        </ul>
-      </details>
+      <p style="margin:0">맛있는 식사와 좌석을 준비할 수 있도록 참석 여부를 알려 주세요!</p>
+      <p class="mine" id="rsvpMine" hidden></p>
+      <div class="btns"><button class="btn sm" id="openRsvp" type="button">참석 여부 알려주기</button></div>
     </div>
   </section>
 
-  <section class="win" id="event">
-    <div class="win-h"><span>EVENT</span><span class="ko">베스트 샷 이벤트</span><span class="x">!</span></div>
+  <section class="win step" id="step4" data-step="4">
+    <div class="win-h"><span>STEP 4</span><span class="ko">우리 사진 살펴보기</span></div>
     <div class="win-b">
-      <h2 class="qname"><small>SIDE QUEST</small>결혼식 날 찍은 사진을 보내줘</h2>
-      <div class="announce" id="announce" hidden>
-        <h3><small>RESULT</small>베스트 샷 결과 발표!</h3>
-        <p class="note">축하드려요! 당첨되신 분께는 저희가 따로 연락드릴게요.</p>
+      <div class="gal" id="gal">
+        <div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div>
       </div>
-      <p style="margin:0">결혼식 날 찍은 사진을 카카오톡 오픈채팅으로 보내 주세요. 저희가 가장 마음에 드는 사진 3장을 골라 선물을 드려요.</p>
-      <ol class="ranks" id="ranks">
-        <li><span class="medal m1">1</span><span class="rk">1등</span><span class="pz">치킨 (3만 원 상당)</span></li>
-        <li><span class="medal m2">2</span><span class="rk">2등</span><span class="pz">올리브영 상품권 (2만 원 상당)</span></li>
-        <li><span class="medal m3">3</span><span class="rk">3등</span><span class="pz">커피 (1만 원 상당)</span></li>
-      </ol>
-      <dl class="stats">
-        <dt>기간</dt><dd id="evPeriod">예식 당일 ~ 마감일</dd>
-        <dt>발표</dt><dd>당첨자는 개별 연락드립니다</dd>
-      </dl>
-      <div class="guide">
-        <b>📌 안내 사항</b>
-        <ul>
-          <li>사진은 <em>원본</em>으로 보내 주시면 감사합니다 🙂<br><small>사진을 고른 뒤 화질을 ‘원본’으로 선택해 주세요.</small></li>
-          <li>1:1 오픈채팅이라 다른 분들은 사진을 볼 수 없어요.</li>
-          <li>장수 제한 없이 마음껏 보내 주세요!</li>
-        </ul>
-      </div>
-      <div class="btns"><a class="btn sm" id="openchat" target="_blank" rel="noopener">💬 카카오톡 오픈채팅으로 바로가기</a></div>
+      <p class="note" id="galNote">웨딩 촬영이 끝나면 사진이 채워질 슬롯이에요.</p>
     </div>
   </section>
 
-  <section class="win">
-    <div class="win-h"><span>GUESTBOOK</span><span class="ko">방명록</span></div>
+  <section class="win step" id="step5" data-step="5">
+    <div class="win-h"><span>STEP 5</span><span class="ko">방명록 남겨주기</span></div>
     <div class="win-b">
       <p style="margin:0">두 사람에게 축하 한마디를 남겨 주세요. 하나하나 다 읽을게요!</p>
       <ul class="gb-preview" id="gbPreview" hidden></ul>
@@ -371,11 +371,40 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     </div>
   </section>
 
-  <section class="win">
-    <div class="win-h"><span>SCREENSHOT</span><span class="ko">우리의 순간</span></div>
+  <section class="win step" id="step6" data-step="6">
+    <div class="win-h"><span>STEP 6</span><span class="ko">이벤트 참여하기</span><span class="x">!</span></div>
     <div class="win-b">
-      <div class="shots"><div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div></div>
-      <p class="note">웨딩 촬영이 끝나면 사진이 저장될 슬롯이에요.</p>
+      <h2 class="qname"><small>SIDE QUEST</small>베스트 샷 이벤트</h2>
+      <div class="announce" id="announce" hidden>
+        <h3><small>RESULT</small>베스트 샷 결과 발표!</h3>
+        <p class="note">축하드려요! 당첨되신 분께는 저희가 따로 연락드릴게요.</p>
+      </div>
+      <p style="margin:0">결혼식 날 찍은 사진을 카카오톡 오픈채팅으로 보내 주세요. 저희가 가장 마음에 드는 사진 3장을 골라 선물을 드려요.</p>
+      <ol class="ranks" id="ranks">
+        <li><span class="medal m1">1</span><span class="rk">1등</span><span class="pz">치킨 기프티콘</span></li>
+        <li><span class="medal m2">2</span><span class="rk">2등</span><span class="pz">올리브영 기프티콘</span></li>
+        <li><span class="medal m3">3</span><span class="rk">3등</span><span class="pz">커피 기프티콘</span></li>
+      </ol>
+      <dl class="stats">
+        <dt>기간</dt><dd id="evPeriod">예식 당일 ~ 마감일</dd>
+        <dt>발표</dt><dd>2028.02.27. (개별 연락)</dd>
+      </dl>
+      <div class="guide">
+        <b>📌 안내 사항</b>
+        <ul>
+          <li>사진은 <em>원본</em>으로 보내 주세요 🙂</li>
+          <li>오픈채팅방에는 <em>본명</em>으로 들어와 주세요!<br><small>당첨되시면 연락드리기 편하게요 ㅎㅎ</small></li>
+        </ul>
+      </div>
+      <div class="btns"><a class="btn sm" id="openchat" target="_blank" rel="noopener">💬 카카오톡 오픈채팅으로 바로가기</a></div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="win-h"><span>INVENTORY</span><span class="ko">마음 전하실 곳</span></div>
+    <div class="win-b" id="accounts">
+      <details class="acc"><summary>신랑측</summary><ul><li><span class="num">계좌 정보를 준비 중이에요.</span></li></ul></details>
+      <details class="acc"><summary>신부측</summary><ul><li><span class="num">계좌 정보를 준비 중이에요.</span></li></ul></details>
     </div>
   </section>
 
@@ -405,6 +434,54 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
       <ul class="gb-list" id="gbList" aria-live="polite"></ul>
       <p class="empty" id="gbEmpty" hidden>아직 메시지가 없어요. 첫 번째 축하를 남겨 주세요!</p>
       <button class="btn sm alt" id="gbMore" type="button" hidden style="align-self:center">더 보기 ▾</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="pop" id="rsvpDialog" aria-labelledby="rsvpTitle">
+  <div class="win">
+    <div class="win-h"><span>STEP 3</span><span class="ko" id="rsvpTitle">참석 여부 알려주기</span><button class="close" type="button" data-close aria-label="닫기">×</button></div>
+    <div class="win-b">
+      <form class="form" id="rsvpForm" novalidate>
+        <fieldset class="seg"><legend>어느 쪽 하객이세요?</legend>
+          <label><input type="radio" name="side" value="groom" required><span>신랑 민수 측</span></label>
+          <label><input type="radio" name="side" value="bride"><span>신부 상현 측</span></label>
+        </fieldset>
+        <fieldset class="seg"><legend>참석 여부</legend>
+          <label><input type="radio" name="attend" value="yes" required><span>참석할게요!</span></label>
+          <label><input type="radio" name="attend" value="no"><span>아쉽지만 못 가요</span></label>
+        </fieldset>
+        <div class="field">
+          <label for="rsvpName">성함</label>
+          <input id="rsvpName" name="name" maxlength="20" autocomplete="name" required placeholder="본명으로 적어 주세요">
+        </div>
+        <div class="when-yes">
+          <div class="field">
+            <label for="rsvpCount">함께 오는 인원 (본인 포함)</label>
+            <select id="rsvpCount" name="count"></select>
+          </div>
+          <fieldset class="seg"><legend>식사</legend>
+            <label><input type="radio" name="meal" value="yes"><span>할게요</span></label>
+            <label><input type="radio" name="meal" value="no"><span>안 해요</span></label>
+            <label><input type="radio" name="meal" value="unsure"><span>미정</span></label>
+          </fieldset>
+        </div>
+        <div class="hp" aria-hidden="true"><label>웹사이트<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <p class="msg-err" id="rsvpErr" role="alert" hidden></p>
+        <button class="btn" id="rsvpSubmit" type="submit">✔ 보내기</button>
+        <p class="note">이미 보내셨다면 다시 보내면 내용이 바뀌어요.</p>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="pop lb" id="lbDialog" aria-label="사진 크게 보기">
+  <div class="win">
+    <div class="win-h"><span>PHOTO</span><span class="ko" id="lbCount">1 / 1</span><button class="close" type="button" data-close aria-label="닫기">×</button></div>
+    <div class="lb-b">
+      <img id="lbImg" alt="">
+      <button class="lb-nav prev" id="lbPrev" type="button" aria-label="이전 사진">◀</button>
+      <button class="lb-nav next" id="lbNext" type="button" aria-label="다음 사진">▶</button>
     </div>
   </div>
 </dialog>
@@ -497,68 +574,16 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
   if (reduce) frame(0); else (function loop(t){frame(t||0);requestAnimationFrame(loop);})();
   window.WQ = {drawSprite:drawSprite, world:world, groom:groom, bride:bride, base:base, PB:PB, PG:PG, heart:heart, reduce:reduce, W:W, H:H, GY:GY};
 
-  /* Portrait */
-  var pc = document.getElementById('portrait').getContext('2d');
-  function portrait(who){
-    pc.clearRect(0,0,32,32);
-    if(who==='상현') drawSprite(pc,bride,PB,0,2,2,15); else drawSprite(pc,groom,PG,0,2,2,15);
-  }
-
-  /* Dialogue */
-  /* ===== 대사 수정은 여기서! w = 말하는 사람(민수/상현), t = 대사(\n은 줄바꿈) ===== */
-  var script = [
-    {w:'상현',t:'어? 여기까지 찾아와 줬구나!\n정말 반가워 :)'},
-    {w:'민수',t:'우리 둘이 오래 같은 파티로\n모험해 왔잖아.'},
-    {w:'상현',t:'이제 평생 같은 파티로\n함께 가기로 했어!'},
-    {w:'민수',t:'그래서 아주 중요한 퀘스트가 하나 생겼어.\n네가 꼭 함께해 줬으면 좋겠어.'},
-    {w:'상현',t:'우리 결혼식 퀘스트, 받아줄래?',choice:true}
-  ];
-  var after = {
-    yes:{w:'민수',t:'고마워! 자세한 내용은\n아래 퀘스트 창에 적어뒀어.'},
-    no:{w:'상현',t:'그럴 줄 알고 아래에 다 적어놨지 ㅎㅎ\n천천히 보고 와줘!'}
-  };
-  var idx=0, typing=null, full='', done=false, end=false;
-  var lineEl=document.getElementById('line'), whoEl=document.getElementById('who'), nextEl=document.getElementById('next'), chEl=document.getElementById('choices');
-  function show(item){
-    whoEl.textContent=item.w; portrait(item.w); full=item.t; chEl.hidden=true; nextEl.hidden=true;
-    clearInterval(typing);
-    if(reduce){ lineEl.textContent=full; finish(item); return; }
-    var n=0; lineEl.textContent=''; done=false;
-    typing=setInterval(function(){ n++; lineEl.textContent=full.slice(0,n); if(n>=full.length){finish(item);} },32);
-    show.cur=item;
-  }
-  function finish(item){
-    clearInterval(typing); lineEl.textContent=full; done=true;
-    if(item.choice){chEl.hidden=false;} else if(!end){nextEl.hidden=false;}
-  }
-  document.getElementById('dlg').addEventListener('click',function(e){
-    if(e.target.closest('button')) return;
-    if(!done){ finish(show.cur); return; }
-    if(end || script[idx].choice) return;
-    idx++; show(script[idx]);
-  });
-  function choose(k){
-    end=true; show(after[k]);
-    if(k==='yes') toast('퀘스트 [민수와 상현의 결혼식]을 수락했습니다!');
-    setTimeout(function(){ document.getElementById('quest').scrollIntoView({behavior:reduce?'auto':'smooth',block:'start'}); }, reduce?0:1400);
-  }
-  document.getElementById('yes').addEventListener('click',function(){choose('yes');});
-  document.getElementById('no').addEventListener('click',function(){choose('no');});
-  document.getElementById('skip').addEventListener('click',function(){ document.getElementById('quest').scrollIntoView({behavior:reduce?'auto':'smooth'}); });
-  /* 프롤로그를 보는 중이면, 프롤로그가 끝난 뒤에 대화를 시작해요 */
-  if (document.documentElement.classList.contains('intro')) window.addEventListener('wq:introdone', function(){ show(script[0]); }, {once:true});
-  else show(script[0]);
-
   /* Toast + copy */
   var tEl=document.getElementById('toast'), tT;
   function toast(m){ tEl.textContent=m; tEl.classList.add('show'); clearTimeout(tT); tT=setTimeout(function(){tEl.classList.remove('show');},2400); }
   window.toast = toast;
-  document.querySelectorAll('.copy').forEach(function(b){
-    b.addEventListener('click',function(){
-      var v=b.getAttribute('data-v'), numEl=b.previousElementSibling;
-      function fallback(){ var r=document.createRange(); r.selectNodeContents(numEl); var s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('계좌번호를 선택했어요. 길게 눌러 복사해 주세요.'); }
-      try{ navigator.clipboard.writeText(v).then(function(){toast('계좌번호를 복사했어요.');},fallback); }catch(e){ fallback(); }
-    });
+  /* 계좌 복사 (계좌 목록은 guest.js가 그려서, 클릭은 위임으로 받아요) */
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.copy'); if(!b) return;
+    var v=b.getAttribute('data-v'), numEl=b.previousElementSibling;
+    function fallback(){ var r=document.createRange(); r.selectNodeContents(numEl); var s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('계좌번호를 선택했어요. 길게 눌러 복사해 주세요.'); }
+    try{ navigator.clipboard.writeText(v).then(function(){toast('계좌번호를 복사했어요.');},fallback); }catch(err){ fallback(); }
   });
 })();
 </script>

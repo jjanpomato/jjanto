@@ -1,4 +1,4 @@
-/* 하객 기능: 방명록 · 베스트 샷 오픈채팅 연결 · 결과 발표 */
+/* 하객 기능: 퀘스트 진행도 · 참석 여부 · 갤러리 · 방명록 · 베스트 샷 오픈채팅 · 결과 발표 · 계좌 */
 (function(){
   var toast = window.toast || function(m){ alert(m); };
   var PAGE = 20;
@@ -7,7 +7,7 @@
   function store(k, v){
     try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; }
   }
-  /* 기기 ID: 방명록 도배 방지에만 써요 */
+  /* 기기 ID: 방명록 도배 방지와 참석 여부 수정에만 써요 */
   var device = store('wq_device');
   if (!device) {
     device = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
@@ -45,9 +45,34 @@
   });
   var savedName = store('wq_name'); if (savedName) $('gbName').value = savedName;
 
+  /* ===== 퀘스트 진행도: STEP을 보거나 해내면 체크 ===== */
+  var doneSteps = (store('wq_steps') || '').split('').filter(Boolean);
+  function renderSteps(){
+    document.querySelectorAll('.ck[data-step]').forEach(function(c){ c.classList.toggle('done', doneSteps.indexOf(c.getAttribute('data-step')) >= 0); });
+    $('qprog').textContent = doneSteps.length >= 6 ? '진행도 6/6 · QUEST CLEAR ★' : '진행도 ' + doneSteps.length + '/6';
+  }
+  function check(n){
+    n = String(n); if (doneSteps.indexOf(n) >= 0) return;
+    doneSteps.push(n); doneSteps.sort(); store('wq_steps', doneSteps.join('')); renderSteps();
+    if (doneSteps.length === 6) toast('메인 퀘스트 [결혼식에 참석하라] 준비 완료! ★');
+  }
+  renderSteps();
+  // 1·2·4단계는 화면에서 충분히 보면 완료로 쳐요
+  if ('IntersectionObserver' in window) {
+    var seen = new IntersectionObserver(function(list){
+      list.forEach(function(en){
+        // 절반 이상 보이거나, 화면 높이의 절반 이상을 차지하면(긴 섹션) 본 것으로
+        if (en.intersectionRatio >= 0.5 || en.intersectionRect.height >= window.innerHeight * 0.5) { check(en.target.getAttribute('data-step')); seen.unobserve(en.target); }
+      });
+    }, { threshold: [0, 0.25, 0.5] });
+    ['step1', 'step2', 'step4'].forEach(function(id){ seen.observe($(id)); });
+  }
+
   /* ===== 이벤트 기간 · 결과 발표 ===== */
   function applyConfig(cfg){
     setOpenchat(cfg);
+    renderAccounts(cfg.accounts);
+    renderGallery(cfg.gallery || []);
     $('evPeriod').textContent = fmtDay(cfg.event.start) + ' ~ ' + fmtDay(cfg.event.end) + (cfg.event.open ? ' (진행 중!)' : '');
     if (cfg.results && cfg.results.length) {
       $('announce').hidden = false;
@@ -122,7 +147,7 @@
       store('wq_gb_last', String(Date.now())); store('wq_name', name);
       if (r.entry) { r.entry._mine = true; gb.all.unshift(r.entry); renderList(true); renderPreview(); }
       f.message.value = ''; $('gbCount').textContent = '0/200';
-      toast('메시지를 남겼어요. 고마워요! ♥');
+      toast('메시지를 남겼어요. 고마워요! ♥'); check(5);
     }).catch(function(x){ showErr(err, x.message); })
       .then(function(){ btn.disabled = false; });
   });
@@ -133,7 +158,7 @@
     var ok = !!cfg.openchatUrl;
     chat.classList.toggle('off', !ok);
     if (ok) chat.href = cfg.openchatUrl; else chat.removeAttribute('href');
-    chat.onclick = ok ? null : function(e){
+    chat.onclick = ok ? function(){ check(6); } : function(e){
       e.preventDefault();
       var ev = cfg.event;
       if (ev.before) toast('예식 당일(' + fmtDay(ev.start) + ')부터 열려요. 그날 사진 많이 찍어 주세요!');
@@ -142,4 +167,101 @@
     };
   }
   setOpenchat({ event: {}, openchatUrl: null });
+
+  /* ===== 마음 전하실 곳 (관리자 페이지에서 입력한 계좌) ===== */
+  function renderAccounts(acc){
+    if (!acc) return;
+    var box = $('accounts'); box.textContent = '';
+    [['groom', '신랑측'], ['bride', '신부측']].forEach(function(side){
+      var d = el('details', 'acc'), ul = el('ul');
+      d.appendChild(el('summary', null, side[1]));
+      var rows = acc[side[0]] || [];
+      if (!rows.length) { var li0 = el('li'); li0.appendChild(el('span', 'num', '계좌 정보를 준비 중이에요.')); ul.appendChild(li0); }
+      rows.forEach(function(r){
+        var li = el('li'), num = el('span', 'num'), v = (r.bank ? r.bank + ' ' : '') + r.number;
+        num.appendChild(el('b', null, r.who)); num.appendChild(document.createTextNode(v));
+        var b = el('button', 'btn sm alt copy', '복사'); b.type = 'button'; b.setAttribute('data-v', v);
+        li.appendChild(num); li.appendChild(b); ul.appendChild(li);
+      });
+      d.appendChild(ul); box.appendChild(d);
+    });
+  }
+
+  /* ===== 우리 사진 (갤러리) ===== */
+  var photos = [], cur = 0;
+  function renderGallery(list){
+    if (!list.length) return;
+    photos = list;
+    var box = $('gal'); box.textContent = '';
+    list.forEach(function(p, i){
+      var b = el('button'); b.type = 'button'; b.setAttribute('aria-label', '사진 ' + (i + 1) + ' 크게 보기');
+      var img = el('img'); img.src = '/api/img?s=t&id=' + encodeURIComponent(p.id); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
+      b.appendChild(img); b.addEventListener('click', function(){ showPhoto(i); openDialog($('lbDialog')); });
+      box.appendChild(b);
+    });
+    $('galNote').textContent = '사진을 누르면 크게 볼 수 있어요.';
+  }
+  function showPhoto(i){
+    cur = (i + photos.length) % photos.length;
+    $('lbImg').src = '/api/img?s=f&id=' + encodeURIComponent(photos[cur].id);
+    $('lbImg').alt = '우리 사진 ' + (cur + 1);
+    $('lbCount').textContent = (cur + 1) + ' / ' + photos.length;
+    // 다음 사진 미리 받아 두기
+    if (photos.length > 1) { var n = new Image(); n.src = '/api/img?s=f&id=' + encodeURIComponent(photos[(cur + 1) % photos.length].id); }
+  }
+  $('lbPrev').addEventListener('click', function(){ showPhoto(cur - 1); });
+  $('lbNext').addEventListener('click', function(){ showPhoto(cur + 1); });
+  $('lbDialog').addEventListener('keydown', function(e){
+    if (e.key === 'ArrowLeft') showPhoto(cur - 1); else if (e.key === 'ArrowRight') showPhoto(cur + 1);
+  });
+  (function(){ // 옆으로 밀어서 넘기기
+    var x0 = null, box = $('lbImg').parentNode;
+    box.addEventListener('touchstart', function(e){ x0 = e.touches[0].clientX; }, { passive: true });
+    box.addEventListener('touchend', function(e){
+      if (x0 === null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40) showPhoto(cur + (dx < 0 ? 1 : -1));
+    });
+  })();
+
+  /* ===== 참석 여부 ===== */
+  var rf = $('rsvpForm');
+  var cnt = rf.count; for (var c = 1; c <= 10; c++) { var o = el('option', null, c + '명'); o.value = c; cnt.appendChild(o); }
+  function syncAttend(){ rf.querySelector('.when-yes').hidden = !(rf.attend.value === 'yes'); }
+  rf.addEventListener('change', syncAttend); syncAttend();
+  var SIDE = { groom: '신랑 측', bride: '신부 측' }, MEAL = { yes: '식사 O', no: '식사 X', unsure: '식사 미정' };
+  function showMine(m){
+    var box = $('rsvpMine');
+    if (!m) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = '✔ ' + m.name + ' 님 (' + SIDE[m.side] + ') · ' + (m.attend === 'yes' ? '참석 ' + m.count + '명 · ' + MEAL[m.meal] : '불참') + ' — 잘 전달됐어요. 고마워요!';
+    $('openRsvp').textContent = '참석 여부 수정하기';
+    check(3);
+  }
+  function fillForm(m){
+    if (!m) { if (savedName) rf.name.value = savedName; return; }
+    rf.side.value = m.side; rf.attend.value = m.attend; rf.name.value = m.name;
+    if (m.attend === 'yes') { rf.count.value = m.count; rf.meal.value = m.meal; }
+    syncAttend();
+  }
+  var mine = null;
+  api('/api/rsvp?device=' + encodeURIComponent(device)).then(function(r){ mine = r.mine; showMine(mine); }).catch(function(){});
+  $('openRsvp').addEventListener('click', function(){ fillForm(mine); showErr($('rsvpErr')); openDialog($('rsvpDialog')); });
+  rf.addEventListener('submit', function(e){
+    e.preventDefault();
+    var err = $('rsvpErr'), btn = $('rsvpSubmit');
+    if (!rf.side.value) return showErr(err, '어느 쪽 하객이신지 골라 주세요.');
+    if (!rf.attend.value) return showErr(err, '참석 여부를 골라 주세요.');
+    if (!rf.name.value.trim()) { rf.name.focus(); return showErr(err, '성함을 적어 주세요.'); }
+    if (rf.attend.value === 'yes' && !rf.meal.value) return showErr(err, '식사 여부를 골라 주세요.');
+    showErr(err); btn.disabled = true;
+    api('/api/rsvp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: device, side: rf.side.value, attend: rf.attend.value, name: rf.name.value.trim(), count: rf.count.value, meal: rf.meal.value, website: rf.website.value })
+    }).then(function(r){
+      mine = r.mine; showMine(mine); store('wq_name', mine.name);
+      $('rsvpDialog').close();
+      toast(mine.attend === 'yes' ? '참석 소식 고마워요! 그날 만나요 ♥' : '알려 줘서 고마워요. 마음만으로도 충분해요 ♥');
+    }).catch(function(x){ showErr(err, x.message); })
+      .then(function(){ btn.disabled = false; });
+  });
 })();
