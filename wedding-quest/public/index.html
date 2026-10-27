@@ -235,6 +235,12 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
 .gb-list .meta time{flex:none;font-family:var(--f-pixel);font-size:11px;color:var(--mute)}
 .gb-list p{margin:2px 0 0;font-size:14px;white-space:pre-line;overflow-wrap:anywhere}
 .empty{margin:0;text-align:center;font-size:14px;color:var(--mute);padding:10px 0}
+/* 배경음악 버튼 (bgm.js): 프롤로그 위에서도 보이게 맨 위에 띄워요 */
+.bgm{position:fixed;z-index:40;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:4px;height:40px;padding:0 10px;font-family:var(--f-pixel);font-size:12px;color:#fff;background:rgba(46,35,71,.86);border:3px solid var(--ink);border-radius:6px;box-shadow:0 3px 0 rgba(43,33,64,.35);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bgm .n{font-size:16px;line-height:1}
+.bgm.off{color:#cfc6e6}
+.bgm.off .n{text-decoration:line-through}
+.bgm:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -477,6 +483,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
 </dialog>
 
 <div class="toast" id="toast" role="status"></div>
+<button class="bgm off" id="bgmBtn" type="button" aria-pressed="false" aria-label="배경음악 켜기"><span class="n" aria-hidden="true">♪</span>BGM</button>
 
 <script>
 (function(){
@@ -578,6 +585,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
 })();
 </script>
 <script src="/intro.js"></script>
+<script src="/bgm.js"></script>
 <script src="/guest.js" defer></script>
 </body>
 </html>
