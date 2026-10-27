@@ -1,4 +1,4 @@
-/* 프롤로그: 줄거리 → 짧은 애니메이션(쿵! → 하트 → 뾰로롱 변신) → 입장 퀴즈 → 청첩장 */
+/* 프롤로그: 줄거리 → 짧은 애니메이션(쿵! → 하트 → 뾰로롱 변신) → 청첩장 */
 (function(){
   var root = document.documentElement, ov = document.getElementById('intro');
   if (!ov || !window.WQ) return;
@@ -34,10 +34,9 @@
   });
 
   /* ===== 단계 전환 ===== */
-  var steps = { title: $('stTitle'), play: $('stPlay'), quiz: $('stQuiz') };
+  var steps = { title: $('stTitle'), play: $('stPlay') };
   function go(name){
     for (var k in steps) steps[k].hidden = k !== name;
-    $('introStep').textContent = name === 'quiz' ? 'FIRST QUEST' : 'PROLOGUE';
     ov.scrollTop = 0;
   }
   var announced = false;
@@ -52,10 +51,10 @@
   }
   $('introSkip').addEventListener('click', done);
   $('replayIntro').addEventListener('click', function(){
-    resetQuiz(); go('title'); root.classList.add('intro');
+    go('title'); root.classList.add('intro');
   });
   $('introStart').addEventListener('click', function(){ go('play'); play(); });
-  $('introJoin').addEventListener('click', function(){ stop(); go('quiz'); setTimeout(function(){ $('quizIn').focus(); }, 50); });
+  $('introJoin').addEventListener('click', done);
 
   /* ===== 애니메이션 ===== */
   var cv = $('introCv'), g = cv.getContext('2d'), boom = $('introBoom'), raf = 0, t0 = 0, last = -1;
@@ -152,28 +151,4 @@
   function stop(){ cancelAnimationFrame(raf); raf = 0; boom.hidden = true; }
   // 화면을 누르면 애니메이션을 끝까지 넘겨요
   cv.addEventListener('click', function(){ if (raf) t0 = performance.now() - END * SLOW; });
-
-  /* ===== 입장 퀴즈 ===== */
-  var tries = 0;
-  function resetQuiz(){
-    tries = 0; $('quizIn').value = ''; $('quizIn').disabled = false; $('quizBtn').disabled = false;
-    $('quizMsg').textContent = ''; $('quizMsg').className = 'quiz-msg'; $('quizHint').hidden = true;
-  }
-  $('quizForm').addEventListener('submit', function(e){
-    e.preventDefault();
-    var input = $('quizIn'), msg = $('quizMsg'), v = input.value.replace(/\D/g, '');
-    if (!v) { msg.className = 'quiz-msg no'; msg.textContent = '숫자를 입력해 주세요!'; input.focus(); return; }
-    if (v === '280212' || v === '20280212') {
-      msg.className = 'quiz-msg ok'; msg.textContent = '정답! QUEST CLEAR ★';
-      input.disabled = true; $('quizBtn').disabled = true;
-      setTimeout(done, reduce ? 300 : 1100);
-      return;
-    }
-    tries++;
-    msg.className = 'quiz-msg no';
-    msg.textContent = tries >= 2 ? '앗, 아쉬워요! 힌트를 확인해 보세요 👇' : '땡! 다시 생각해 봐요 🤔';
-    if (tries >= 2) $('quizHint').hidden = false;
-    input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
-    input.select();
-  });
 })();

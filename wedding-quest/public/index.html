@@ -137,15 +137,8 @@ html.intro body{overflow:hidden}
 .start-btns{display:flex;flex-direction:column;gap:10px;align-items:stretch}
 .start-btns .btn{justify-content:center}
 .blink{animation:blink 1s steps(2) infinite}
-.quiz-in{font:inherit;font-family:var(--f-pixel);font-size:26px;letter-spacing:.35em;text-align:center;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:4px;padding:8px 0 8px .35em;width:100%}
-.quiz-in:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
-.quiz-in.shake{animation:shake .35s}
-@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
-.quiz-msg{margin:0;min-height:1.6em;font-size:14px;text-align:center}
-.quiz-msg.no{color:#c23b4a} .quiz-msg.ok{color:#2e8a3c;font-family:var(--f-display);font-size:17px}
-.hint{margin:0;font-size:14px;background:#fff6d6;border:2px solid var(--ink);border-radius:4px;padding:6px 10px;text-align:center}
 .replay{align-self:center;font:inherit;font-family:var(--f-body);font-size:14px;color:var(--mute);background:transparent;border:0;text-decoration:underline;cursor:pointer}
-@media (prefers-reduced-motion:reduce){.blink,.quiz-in.shake{animation:none}.intro-ov.bye{transition:none}}
+@media (prefers-reduced-motion:reduce){.blink{animation:none}.intro-ov.bye{transition:none}}
 
 /* "쿵!" 글자는 캔버스가 아니라 화면 글자로 띄워서 선명하게 */
 .boom{position:absolute;left:50%;top:30%;z-index:1;transform:translate(-50%,-50%);font-family:var(--f-display);font-size:clamp(30px,10vw,42px);line-height:1;color:#ff6b88;pointer-events:none;animation:boom .35s steps(3) both;
@@ -259,22 +252,6 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
         <div class="win-b">
           <div><span class="who" id="introWho">나레이션</span><p class="line" id="introLine" aria-live="polite"></p></div>
           <div class="choices" id="introGo" hidden><button class="btn" id="introJoin" type="button">좋아, 같이 갈래!</button></div>
-        </div>
-      </section>
-    </div>
-
-    <div class="stage" id="stQuiz" hidden>
-      <section class="win">
-        <div class="win-h"><span>QUEST</span><span class="ko">입장 퀴즈</span><span class="x">?</span></div>
-        <div class="win-b">
-          <h2 class="qname"><small>FIRST QUEST</small>상현이와 민수의 결혼 날짜는?</h2>
-          <form id="quizForm" novalidate style="display:flex;flex-direction:column;gap:10px">
-            <label class="note" for="quizIn">숫자 6자리로 적어 주세요 (연도 끝 2자리 + 월 + 일)</label>
-            <input class="quiz-in" id="quizIn" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="______">
-            <p class="quiz-msg" id="quizMsg" role="status"></p>
-            <p class="hint" id="quizHint" hidden>💡 힌트: 2028년 2월 12일 토요일이에요!</p>
-            <button class="btn" type="submit" id="quizBtn" style="justify-content:center">정답 제출</button>
-          </form>
         </div>
       </section>
     </div>
