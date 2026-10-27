@@ -50,6 +50,8 @@
     }, reduce ? 0 : 450);
   }
   $('introSkip').addEventListener('click', done);
+  // 어른들도 찾기 쉽게 화면 곳곳에 둔 '청첩장 바로 보기' 버튼
+  document.querySelectorAll('[data-skip]').forEach(function(b){ b.addEventListener('click', done); });
   $('replayIntro').addEventListener('click', function(){
     go('title'); root.classList.add('intro');
   });
