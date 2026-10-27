@@ -1,4 +1,4 @@
-/* 하객 기능: 퀘스트 진행도 · 참석 여부 · 갤러리 · 방명록 · 베스트 샷 오픈채팅 · 결과 발표 · 계좌 */
+/* 하객 기능: 참석 여부 · 갤러리 · 방명록 · 베스트 샷 오픈채팅 · 결과 발표 · 계좌 */
 (function(){
   var toast = window.toast || function(m){ alert(m); };
   var PAGE = 20;
@@ -44,29 +44,6 @@
     d.addEventListener('click', function(e){ if (e.target === d || e.target.closest('[data-close]')) d.close ? d.close() : d.removeAttribute('open'); });
   });
   var savedName = store('wq_name'); if (savedName) $('gbName').value = savedName;
-
-  /* ===== 퀘스트 진행도: STEP을 보거나 해내면 체크 ===== */
-  var doneSteps = (store('wq_steps') || '').split('').filter(Boolean);
-  function renderSteps(){
-    document.querySelectorAll('.ck[data-step]').forEach(function(c){ c.classList.toggle('done', doneSteps.indexOf(c.getAttribute('data-step')) >= 0); });
-    $('qprog').textContent = doneSteps.length >= 6 ? '진행도 6/6 · QUEST CLEAR ★' : '진행도 ' + doneSteps.length + '/6';
-  }
-  function check(n){
-    n = String(n); if (doneSteps.indexOf(n) >= 0) return;
-    doneSteps.push(n); doneSteps.sort(); store('wq_steps', doneSteps.join('')); renderSteps();
-    if (doneSteps.length === 6) toast('메인 퀘스트 [결혼식에 참석하라] 준비 완료! ★');
-  }
-  renderSteps();
-  // 1·2·4단계는 화면에서 충분히 보면 완료로 쳐요
-  if ('IntersectionObserver' in window) {
-    var seen = new IntersectionObserver(function(list){
-      list.forEach(function(en){
-        // 절반 이상 보이거나, 화면 높이의 절반 이상을 차지하면(긴 섹션) 본 것으로
-        if (en.intersectionRatio >= 0.5 || en.intersectionRect.height >= window.innerHeight * 0.5) { check(en.target.getAttribute('data-step')); seen.unobserve(en.target); }
-      });
-    }, { threshold: [0, 0.25, 0.5] });
-    ['step1', 'step2', 'step4'].forEach(function(id){ seen.observe($(id)); });
-  }
 
   /* ===== 이벤트 기간 · 결과 발표 ===== */
   function applyConfig(cfg){
@@ -147,7 +124,7 @@
       store('wq_gb_last', String(Date.now())); store('wq_name', name);
       if (r.entry) { r.entry._mine = true; gb.all.unshift(r.entry); renderList(true); renderPreview(); }
       f.message.value = ''; $('gbCount').textContent = '0/200';
-      toast('메시지를 남겼어요. 고마워요! ♥'); check(5);
+      toast('메시지를 남겼어요. 고마워요! ♥');
     }).catch(function(x){ showErr(err, x.message); })
       .then(function(){ btn.disabled = false; });
   });
@@ -158,7 +135,7 @@
     var ok = !!cfg.openchatUrl;
     chat.classList.toggle('off', !ok);
     if (ok) chat.href = cfg.openchatUrl; else chat.removeAttribute('href');
-    chat.onclick = ok ? function(){ check(6); } : function(e){
+    chat.onclick = ok ? null : function(e){
       e.preventDefault();
       var ev = cfg.event;
       if (ev.before) toast('예식 당일(' + fmtDay(ev.start) + ')부터 열려요. 그날 사진 많이 찍어 주세요!');
@@ -235,7 +212,6 @@
     box.hidden = false;
     box.textContent = '✔ ' + m.name + ' 님 (' + SIDE[m.side] + ') · ' + (m.attend === 'yes' ? '참석 ' + m.count + '명 · ' + MEAL[m.meal] : '불참') + ' — 잘 전달됐어요. 고마워요!';
     $('openRsvp').textContent = '참석 여부 수정하기';
-    check(3);
   }
   function fillForm(m){
     if (!m) { if (savedName) rf.name.value = savedName; return; }
