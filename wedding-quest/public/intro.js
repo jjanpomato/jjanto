@@ -58,7 +58,7 @@
   $('introJoin').addEventListener('click', function(){ stop(); go('quiz'); setTimeout(function(){ $('quizIn').focus(); }, 50); });
 
   /* ===== 애니메이션 ===== */
-  var cv = $('introCv'), g = cv.getContext('2d'), raf = 0, t0 = 0, last = -1;
+  var cv = $('introCv'), g = cv.getContext('2d'), boom = $('introBoom'), raf = 0, t0 = 0, last = -1;
   var END = 7600, SLOW = 2; // 대사를 읽을 수 있게 전체를 2배 느리게 재생해요
   var lines = [
     [0,    '나레이션', '홀로 모험하던\n민수와 상현.'],
@@ -94,10 +94,7 @@
       draw(g, mage, PM, mx, feet(mage) - (walking ? 0 : 0) - (t < 2400 ? 1 - step : 0));
       draw(g, staff, PX, mx + 16, feet(staff) - 2);
       if (t >= 2400 && t < 3200) {
-        // 쿵! + 머리 위 별
-        g.fillStyle = '#2b2140'; g.font = 'bold 12px "Jua", sans-serif'; g.textAlign = 'center';
-        g.fillStyle = '#fff'; g.fillText('쿵!', 81, 50); g.fillText('쿵!', 79, 50); g.fillText('쿵!', 80, 49); g.fillText('쿵!', 80, 51);
-        g.fillStyle = '#d9455f'; g.fillText('쿵!', 80, 50);
+        // 머리 위 별 (쿵! 글자는 #introBoom)
         for (var s = 0; s < 3; s++) {
           var a = t / 150 + s * 2.1;
           g.fillStyle = '#ffd95a';
@@ -137,6 +134,8 @@
       if (flash > 0) { g.fillStyle = 'rgba(255,255,255,' + Math.min(1, flash).toFixed(2) + ')'; g.fillRect(0, 0, WQ.W, WQ.H); }
     }
     g.restore();
+    var boomOn = t >= 2400 && t < 3200;
+    if (boom.hidden === boomOn) boom.hidden = !boomOn;
   }
   function loop(now){
     if (!t0) t0 = now;
@@ -150,7 +149,7 @@
     if (reduce) { scene(END); say(END); return; }
     t0 = 0; raf = requestAnimationFrame(loop);
   }
-  function stop(){ cancelAnimationFrame(raf); raf = 0; }
+  function stop(){ cancelAnimationFrame(raf); raf = 0; boom.hidden = true; }
   // 화면을 누르면 애니메이션을 끝까지 넘겨요
   cv.addEventListener('click', function(){ if (raf) t0 = performance.now() - END * SLOW; });
 

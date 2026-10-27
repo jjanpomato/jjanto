@@ -114,7 +114,7 @@ footer{text-align:center;font-family:var(--f-pixel);font-size:11px;letter-spacin
 .announce{border:3px solid var(--ink);border-radius:4px;background:linear-gradient(180deg,#fff6d6,#fff);padding:10px;display:flex;flex-direction:column;gap:8px}
 .announce h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:17px;display:flex;align-items:center;gap:8px}
 .announce h3 small{font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:#fff;background:var(--rose);border:2px solid var(--ink);padding:0 6px}
-.ranks .win-name{font-family:var(--f-display);color:#c23b4a}
+.ranks .win-name{font-family:var(--f-display);color:#5b3fb8}
 
 /* Prologue overlay */
 .intro-ov{display:none;position:fixed;inset:0;z-index:30;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,var(--sky2) 100%);overflow-y:auto;overscroll-behavior:contain}
@@ -147,6 +147,12 @@ html.intro body{overflow:hidden}
 .replay{align-self:center;font:inherit;font-family:var(--f-body);font-size:14px;color:var(--mute);background:transparent;border:0;text-decoration:underline;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.blink,.quiz-in.shake{animation:none}.intro-ov.bye{transition:none}}
 
+/* "쿵!" 글자는 캔버스가 아니라 화면 글자로 띄워서 선명하게 */
+.boom{position:absolute;left:50%;top:30%;z-index:1;transform:translate(-50%,-50%);font-family:var(--f-display);font-size:clamp(30px,10vw,42px);line-height:1;color:#ff6b88;pointer-events:none;animation:boom .35s steps(3) both;
+  text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink)}
+@keyframes boom{0%{transform:translate(-50%,-50%) scale(.4)}60%{transform:translate(-50%,-50%) scale(1.25)}100%{transform:translate(-50%,-50%) scale(1)}}
+@media (prefers-reduced-motion:reduce){.boom{animation:none}}
+
 /* Main quest title */
 .mq{margin:4px 0 -4px;text-align:center;font-family:var(--f-display);font-weight:400;font-size:clamp(30px,9.5vw,40px);line-height:1.15;color:#fff;text-wrap:balance;
   text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink),0 6px 0 rgba(43,33,64,.35)}
@@ -157,7 +163,7 @@ html.intro body{overflow:hidden}
 .parents p{margin:0;font-size:16px}
 .parents .pn{font-family:var(--f-display)}
 .parents .rel{color:var(--mute);margin-left:2px}
-.parents b{font-family:var(--f-display);font-weight:400;font-size:18px;color:#c23b4a}
+.parents b{font-family:var(--f-display);font-weight:400;font-size:18px;color:#5b3fb8}
 .mine{margin:0;font-size:14px;background:#f1fbe9;border:2px solid var(--ink);border-radius:4px;padding:6px 10px}
 
 /* Gallery */
@@ -247,7 +253,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
     </div>
 
     <div class="stage" id="stPlay" hidden>
-      <div class="scene"><canvas id="introCv" width="160" height="110" aria-label="민수와 상현이 길에서 부딪힌 뒤 눈이 맞아 웨딩 옷으로 변신하는 장면"></canvas></div>
+      <div class="scene"><span class="boom" id="introBoom" hidden>쿵!</span><canvas id="introCv" width="160" height="110" aria-label="민수와 상현이 길에서 부딪힌 뒤 눈이 맞아 웨딩 옷으로 변신하는 장면"></canvas></div>
       <section class="win">
         <div class="win-h"><span>NPC TALK</span></div>
         <div class="win-b">
