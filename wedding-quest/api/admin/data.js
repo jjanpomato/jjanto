@@ -1,21 +1,14 @@
 import { isAdmin } from '../../lib/auth.js';
-import { eventWindow } from '../../lib/config.js';
-import { loadJson, updateJson, deleteFile, FILES } from '../../lib/store.js';
-import { json, fail } from '../../lib/http.js';
-
-const EMPTY_RESULTS = { published: false, winners: [] };
+import { eventWindow, LIMITS } from '../../lib/config.js';
+import { loadJson, updateJson, FILES, EMPTY_EVENT } from '../../lib/store.js';
+import { json, fail, cleanText } from '../../lib/http.js';
 
 async function snapshot() {
-  const [guestbook, photos, results] = await Promise.all([
-    loadJson(FILES.guestbook, []),
-    loadJson(FILES.photos, []),
-    loadJson(FILES.results, EMPTY_RESULTS),
-  ]);
+  const [guestbook, ev] = await Promise.all([loadJson(FILES.guestbook, []), loadJson(FILES.event, EMPTY_EVENT)]);
   return {
     event: eventWindow(),
+    settings: { ...EMPTY_EVENT, ...ev },
     guestbook: guestbook.map(({ id, name, msg, at }) => ({ id, name, msg, at })),
-    photos: photos.map(({ id, name, at, size, dev }) => ({ id, name, at, size, dev: dev.slice(0, 6) })),
-    results,
   };
 }
 
@@ -32,42 +25,38 @@ export async function POST(request) {
   } catch {
     return fail('잘못된 요청이에요.');
   }
-  const { action, id } = body;
+  const { action } = body;
 
   if (action === 'deleteEntry') {
     await updateJson(FILES.guestbook, [], (list) => {
-      const i = list.findIndex((e) => e.id === id);
+      const i = list.findIndex((e) => e.id === body.id);
       if (i < 0) return { abort: null };
       list.splice(i, 1);
     });
-  } else if (action === 'deletePhoto') {
-    let removed = null;
-    await updateJson(FILES.photos, [], (list) => {
-      const i = list.findIndex((p) => p.id === id);
-      if (i < 0) return { abort: null };
-      [removed] = list.splice(i, 1);
+  } else if (action === 'setOpenchat') {
+    // 빈 값이면 링크 해제. 카카오 오픈채팅 주소만 받아요
+    const url = String(body.url || '').trim();
+    if (url && !/^https:\/\/open\.kakao\.com\/[A-Za-z0-9/_\-?=&.]+$/.test(url)) {
+      return fail('카카오톡 오픈채팅 링크(https://open.kakao.com/...)를 넣어 주세요.');
+    }
+    await updateJson(FILES.event, EMPTY_EVENT, (ev) => {
+      ev.openchatUrl = url;
     });
-    if (removed) await deleteFile(removed.path).catch(() => {});
-    await updateJson(FILES.results, EMPTY_RESULTS, (r) => {
-      const before = r.winners.length;
-      r.winners = r.winners.filter((w) => w.photoId !== id);
-      if (r.winners.length === before) return { abort: null };
-    });
-  } else if (action === 'setRank') {
-    // rank: 1·2·3 지정, 0이면 해제. 같은 등수에 다른 사진이 있으면 바꿔 끼워요
-    const rank = Number(body.rank);
-    if (![0, 1, 2, 3].includes(rank)) return fail('등수가 올바르지 않아요.');
-    const photos = await loadJson(FILES.photos, []);
-    const photo = photos.find((p) => p.id === id);
-    if (!photo) return fail('사진을 찾지 못했어요.', 404);
-    await updateJson(FILES.results, EMPTY_RESULTS, (r) => {
-      r.winners = r.winners.filter((w) => w.photoId !== id && w.rank !== rank);
-      if (rank) r.winners.push({ rank, photoId: id, name: photo.name });
-      r.winners.sort((a, b) => a.rank - b.rank);
+  } else if (action === 'setWinners') {
+    // names: [1등, 2등, 3등] 이름. 빈 칸은 미정
+    const names = Array.isArray(body.names) ? body.names.slice(0, 3) : [];
+    const winners = [];
+    for (let i = 0; i < 3; i++) {
+      const n = cleanText(names[i], LIMITS.nameMax);
+      if (n.value && !n.ok) return fail(`이름은 ${LIMITS.nameMax}자 이내로 적어 주세요.`);
+      if (n.value) winners.push({ rank: i + 1, name: n.value });
+    }
+    await updateJson(FILES.event, EMPTY_EVENT, (ev) => {
+      ev.winners = winners;
     });
   } else if (action === 'publish') {
-    await updateJson(FILES.results, EMPTY_RESULTS, (r) => {
-      r.published = !!body.published;
+    await updateJson(FILES.event, EMPTY_EVENT, (ev) => {
+      ev.published = !!body.published;
     });
   } else {
     return fail('알 수 없는 작업이에요.');

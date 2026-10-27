@@ -1,5 +1,5 @@
-// 저장소: Vercel Blob(비공개 스토어). BLOB_READ_WRITE_TOKEN이 없으면(로컬 개발) .data/ 폴더를 써요.
-import { put, get, del } from '@vercel/blob';
+// 저장소: Vercel Blob(비공개 스토어). 방명록·이벤트 설정 JSON을 보관해요. BLOB_READ_WRITE_TOKEN이 없으면(로컬 개발) .data/ 폴더를 써요.
+import { put, get } from '@vercel/blob';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -85,40 +85,10 @@ export async function loadJson(pathname, fallback) {
   return (await readJson(pathname, fallback)).data;
 }
 
-export async function putFile(pathname, buf, contentType) {
-  if (!useBlob) {
-    const file = path.join(LOCAL_DIR, pathname);
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, buf);
-    return;
-  }
-  await put(pathname, buf, { access: 'private', contentType, addRandomSuffix: false, allowOverwrite: false });
-}
-
-export async function getFile(pathname) {
-  if (!useBlob) {
-    try {
-      const ext = path.extname(pathname).slice(1);
-      return { body: await fs.readFile(path.join(LOCAL_DIR, pathname)), contentType: ext === 'jpg' ? 'image/jpeg' : 'image/' + ext };
-    } catch {
-      return null;
-    }
-  }
-  const r = await get(pathname, { access: 'private' });
-  if (!r || r.statusCode !== 200) return null;
-  return { body: r.stream, contentType: r.blob.contentType };
-}
-
-export async function deleteFile(pathname) {
-  if (!useBlob) {
-    await fs.rm(path.join(LOCAL_DIR, pathname), { force: true });
-    return;
-  }
-  await del(pathname);
-}
-
 export const FILES = {
   guestbook: 'data/guestbook.json',
-  photos: 'data/photos.json',
-  results: 'data/results.json',
+  // 오픈채팅 링크 + 당첨자 발표
+  event: 'data/event.json',
 };
+
+export const EMPTY_EVENT = { openchatUrl: '', published: false, winners: [] };
