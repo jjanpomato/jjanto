@@ -28,3 +28,7 @@ Blob 토큰이 없으면 `.data/` 폴더에 저장돼요.
 
 ## QR 코드
 `npm run qr -- https://최종주소` → `qr/wedding-quest-qr.png`
+
+## 링크 미리보기 그림
+`npm run dev`를 켠 상태에서 `node scripts/og.mjs` → `public/og.png` (1200x630) 다시 만들기.
+카카오톡은 미리보기를 저장해 두기 때문에, 그림을 바꾼 뒤에는 카카오 공유 디버거(https://developers.kakao.com/tool/debugger/sharing)에서 주소를 넣고 "캐시 초기화"를 해야 새 그림이 떠요.
