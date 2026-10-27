@@ -1,54 +1,80 @@
-/* 배경음악: 8비트 게임풍 BGM을 브라우저에서 바로 연주해요 (음악 파일 없음, 직접 작곡한 곡)
+/* 배경음악: 브라우저에서 바로 연주하는 8비트 BGM 두 곡 (음악 파일 없음, 직접 작곡한 곡)
+   - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 잔잔한 오르골 곡이 나와요
    - 휴대폰은 화면을 한 번 눌러야 소리가 나서, 첫 터치(모험 시작·청첩장 바로 보기 등) 때 시작해요
    - 오른쪽 아래 ♪ 버튼으로 끄고 켤 수 있고, 끈 상태는 그 기기에 기억해요
-   - 나중에 MP3로 바꾸려면 public/에 파일을 넣고 SRC에 경로를 적으면 돼요 (예: '/bgm.mp3') */
+   - 나중에 MP3로 바꾸려면 public/에 파일을 넣고 아래 곡의 src에 경로를 적으면 돼요 (예: '/bgm.mp3') */
 (function(){
-  var SRC = '';
-  var VOL = 0.4, KEY = 'wq_bgm_off';
-  var btn = document.getElementById('bgmBtn');
+  var VOL = 0.4, KEY = 'wq_bgm_off', FADE = 0.6;
+  var root = document.documentElement, btn = document.getElementById('bgmBtn');
   if (!btn) return;
   function store(v){ try { if (v === undefined) return localStorage.getItem(KEY); if (v) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY); } catch (e) { return null; } }
 
   /* ===== 악보 =====
-     8분음표 = 1칸, 한 마디 = 8칸, 16마디가 반복돼요. 음 이름 뒤 숫자는 칸 수, '.'은 쉼표 */
-  var BPM = 108;
-  var melody = [
-    // A: 길 위에서 만난 두 사람
-    'E5 2','G5 2','C6 2','B5 1','A5 1',  'G5 2','E5 2','C5 2','E5 2',
-    'F5 2','A5 2','C6 2','A5 1','G5 1',  'G5 4','F5 1','E5 1','D5 2',
-    'E5 2','G5 2','C6 2','D6 1','E6 1',  'D6 2','B5 2','G5 4',
-    'A5 2','C6 2','B5 2','D6 2',         'C6 6','. 2',
-    // B: 함께 떠나는 웨딩 퀘스트
-    'A5 1','G5 1','F5 2','A5 2','C6 2',  'B5 1','A5 1','G5 2','B5 2','D6 2',
-    'G5 2','B5 2','E6 3','D6 1',         'C6 2','A5 2','E5 4',
-    'F5 2','A5 2','D6 2','C6 1','A5 1',  'B5 2','D6 2','G5 2','A5 1','B5 1',
-    'E6 2','D6 1','C6 1','B5 2','D6 2',  'C6 6','. 2'
-  ];
-  // 마디별 화음 (한 마디에 두 개면 반 마디씩)
-  var chords = ['C','Am','F','G','C','Em','F G','C','F','G','Em','Am','Dm','G','C','C'];
-  var CH = { C:['C','E','G'], Am:['A','C','E'], F:['F','A','C'], G:['G','B','D'], Em:['E','G','B'], Dm:['D','F','A'] };
+     8분음표 = 1칸, 한 마디 = 8칸, 16마디가 반복돼요. 음 이름 뒤 숫자는 칸 수, '.'은 쉼표, b는 플랫 */
+  var SONGS = {
+    // 모험 곡: 통통 튀는 RPG 마을 느낌
+    adventure: { src: '', bpm: 108, lead: -1, melody: [
+      // A: 길 위에서 만난 두 사람
+      'E5 2','G5 2','C6 2','B5 1','A5 1',  'G5 2','E5 2','C5 2','E5 2',
+      'F5 2','A5 2','C6 2','A5 1','G5 1',  'G5 4','F5 1','E5 1','D5 2',
+      'E5 2','G5 2','C6 2','D6 1','E6 1',  'D6 2','B5 2','G5 4',
+      'A5 2','C6 2','B5 2','D6 2',         'C6 6','. 2',
+      // B: 함께 떠나는 웨딩 퀘스트
+      'A5 1','G5 1','F5 2','A5 2','C6 2',  'B5 1','A5 1','G5 2','B5 2','D6 2',
+      'G5 2','B5 2','E6 3','D6 1',         'C6 2','A5 2','E5 4',
+      'F5 2','A5 2','D6 2','C6 1','A5 1',  'B5 2','D6 2','G5 2','A5 1','B5 1',
+      'E6 2','D6 1','C6 1','B5 2','D6 2',  'C6 6','. 2'
+    ], chords: ['C','Am','F','G','C','Em','F G','C','F','G','Em','Am','Dm','G','C','C'] },
+    // 청첩장 곡: 느릿한 오르골 느낌
+    calm: { src: '', bpm: 72, lead: 0, melody: [
+      // A: 같은 길을 걷기로 한 두 사람
+      'C5 2','F5 2','A5 4',                'G5 3','F5 1','E5 2','G5 2',
+      'F5 4','A5 2','D6 2',                'C6 6','Bb5 1','A5 1',
+      'A5 4','G5 2','F5 2',                'G5 4','C6 2','E5 2',
+      'D5 2','F5 2','E5 2','G5 2',         'F5 6','. 2',
+      // B: 소중한 분들께 드리는 인사
+      'D6 3','C6 1','A5 2','F5 2',         'Bb5 3','A5 1','F5 2','D5 2',
+      'C6 3','Bb5 1','A5 2','C6 2',        'G5 6','. 2',
+      'F5 2','Bb5 2','D6 2','C6 1','Bb5 1','A5 2','G5 2','E5 2','G5 2',
+      'G5 2','E5 2','C6 2','Bb5 2',        'F5 8'
+    ], chords: ['F','C','Dm','Bb','F','C','Bb C','F','Dm','Bb','F','C','Bb','C','C','F'] }
+  };
+  var CH = { C:['C','E','G'], Am:['A','C','E'], F:['F','A','C'], G:['G','B','D'], Em:['E','G','B'], Dm:['D','F','A'], Bb:['Bb','D','F'] };
   var SEMI = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
-  function hz(name, oct){ return 440 * Math.pow(2, (SEMI[name] + (oct + 1) * 12 - 69) / 12); }
-  function noteHz(s){ return hz(s[0], +s.slice(1)); }
+  function semi(name){ return SEMI[name[0]] - (name[1] === 'b' ? 1 : 0); }
+  function hz(name, oct){ return 440 * Math.pow(2, (semi(name) + (oct + 1) * 12 - 69) / 12); }
+  function noteHz(s){ var n = s.replace(/\d+$/, ''); return hz(n, +s.slice(n.length)); }
 
-  var STEP = 60 / BPM / 2, BARS = chords.length, LOOP = BARS * 8 * STEP;
-  // 악보를 [시작 칸, 길이, 주파수, 악기] 목록으로 펼쳐 둬요
-  var events = [], pos = 0;
-  melody.forEach(function(m){
-    var p = m.split(' '), len = +p[1];
-    if (p[0] !== '.') events.push([pos, len, noteHz(p[0]) / 2, 'lead']);
-    pos += len;
-  });
-  chords.forEach(function(c, bar){
-    c.split(' ').forEach(function(name, half, all){
-      var span = 8 / all.length, at = bar * 8 + half * span, tones = CH[name], root = hz(tones[0], 2), fifth = hz(tones[2], SEMI[tones[2]] < SEMI[tones[0]] ? 3 : 2);
-      // 베이스: 근음·5음을 통통 번갈아
-      for (var i = 0; i < span; i += 2) events.push([at + i, 1.6, i % 4 ? fifth : root, 'bass']);
-      // 반주: 엇박에 화음을 콕콕
-      for (var j = 1; j < span; j += 2) tones.forEach(function(t){ events.push([at + j, 0.7, hz(t, 4), 'pad']); });
-      // 하이햇
-      for (var k = 1; k < span; k += 2) events.push([at + k, 0.25, 0, 'hat']);
+  // 악보를 [시작 초, 길이 초, 주파수, 악기] 목록으로 펼쳐 둬요
+  Object.keys(SONGS).forEach(function(id){
+    var song = SONGS[id], step = 60 / song.bpm / 2, ev = [], pos = 0, calm = id === 'calm';
+    function add(at, len, f, kind){ ev.push([at * step, len * step, f, kind]); }
+    song.melody.forEach(function(m){
+      var p = m.split(' '), len = +p[1];
+      if (p[0] !== '.') add(pos, len, noteHz(p[0]) * Math.pow(2, song.lead), calm ? 'soft' : 'lead');
+      pos += len;
     });
+    song.chords.forEach(function(c, bar){
+      c.split(' ').forEach(function(name, half, all){
+        var span = 8 / all.length, at = bar * 8 + half * span, tones = CH[name];
+        var r2 = hz(tones[0], 2), f2 = hz(tones[2], semi(tones[2]) < semi(tones[0]) ? 3 : 2);
+        if (calm) {
+          // 베이스는 길게 한 번, 반주는 오르골처럼 화음을 한 음씩 굴려요
+          add(at, span, r2, 'sub');
+          var up = [hz(tones[0], 3), f2 * 2, hz(tones[1], 4), f2 * 4];
+          [0, 1, 2, 3, 2, 1, 2, 3].slice(0, span).forEach(function(k, i){ add(at + i, 2, up[k], 'bell'); });
+        } else {
+          // 베이스: 근음·5음을 통통 번갈아 / 반주: 엇박에 화음을 콕콕 / 하이햇
+          for (var i = 0; i < span; i += 2) add(at + i, 1.6, i % 4 ? f2 : r2, 'bass');
+          for (var j = 1; j < span; j += 2) {
+            tones.forEach(function(t){ add(at + j, 0.7, hz(t, 4), 'pad'); });
+            add(at + j, 0.25, 0, 'hat');
+          }
+        }
+      });
+    });
+    song.events = ev.sort(function(a, b){ return a[0] - b[0]; });
+    song.loop = song.chords.length * 8 * step;
   });
 
   /* ===== 악기 ===== */
@@ -59,7 +85,8 @@
   }
   var noiseBuf = null;
   function voice(ctx, out, e, t){
-    var dur = e[1] * STEP, kind = e[3], g = ctx.createGain(), src;
+    var dur = e[1], kind = e[3], g = ctx.createGain(), src;
+    g.connect(out);
     if (kind === 'hat') {
       if (!noiseBuf || noiseBuf.sampleRate !== ctx.sampleRate) {
         noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
@@ -70,86 +97,103 @@
       src.connect(hp); hp.connect(g);
       g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       src.start(t); src.stop(t + 0.06);
-    } else {
-      src = ctx.createOscillator(); src.frequency.value = e[2];
-      if (kind === 'bass') src.type = 'triangle';
-      else {
-        var w = ctx.wqWaves || (ctx.wqWaves = { lead: pulse(ctx, 0.25), pad: pulse(ctx, 0.125) });
-        src.setPeriodicWave(w[kind]);
-      }
-      var peak = kind === 'lead' ? 0.2 : kind === 'bass' ? 0.34 : 0.045, gate = dur * 0.88;
-      src.connect(g);
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(peak, t + 0.006);
-      g.gain.linearRampToValueAtTime(peak * (kind === 'lead' ? 0.7 : 0.5), t + Math.min(0.12, gate));
-      g.gain.setValueAtTime(peak * (kind === 'lead' ? 0.7 : 0.5), t + gate);
-      g.gain.linearRampToValueAtTime(0, t + gate + 0.03);
-      if (kind === 'lead' && dur > 0.5) {
-        // 긴 음엔 살짝 비브라토
-        var lfo = ctx.createOscillator(), lg = ctx.createGain();
-        lfo.frequency.value = 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(e[2] * 0.008, t + dur);
-        lfo.connect(lg); lg.connect(src.frequency); lfo.start(t); lfo.stop(t + gate + 0.05);
-      }
-      src.start(t); src.stop(t + gate + 0.05);
+      return;
     }
-    g.connect(out);
+    src = ctx.createOscillator(); src.frequency.value = e[2]; src.connect(g);
+    if (kind === 'bell') {
+      // 오르골: 땡 하고 울린 뒤 천천히 사라지는 소리
+      src.type = 'sine';
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.07, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      src.start(t); src.stop(t + dur + 0.02);
+      return;
+    }
+    var w = ctx.wqWaves || (ctx.wqWaves = { lead: pulse(ctx, 0.25), pad: pulse(ctx, 0.125) });
+    if (w[kind]) src.setPeriodicWave(w[kind]); else src.type = 'triangle';
+    var soft = kind === 'soft' || kind === 'sub';
+    var peak = { lead: 0.2, pad: 0.045, bass: 0.34, soft: 0.3, sub: 0.2 }[kind], hold = peak * (kind === 'lead' ? 0.7 : 0.5);
+    var gate = dur * (soft ? 0.96 : 0.88), rel = soft ? 0.12 : 0.03;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + (soft ? 0.03 : 0.006));
+    g.gain.linearRampToValueAtTime(hold, t + Math.min(soft ? 0.4 : 0.12, gate));
+    g.gain.setValueAtTime(hold, t + gate);
+    g.gain.linearRampToValueAtTime(0, t + gate + rel);
+    if ((kind === 'lead' || kind === 'soft') && dur > 0.5) {
+      // 긴 음엔 살짝 비브라토
+      var lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.frequency.value = soft ? 4.5 : 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(e[2] * 0.008, t + dur);
+      lfo.connect(lg); lg.connect(src.frequency); lfo.start(t); lfo.stop(t + gate + rel + 0.02);
+    }
+    src.start(t); src.stop(t + gate + rel + 0.02);
   }
 
   /* ===== 재생 (조금씩 미리 예약하는 방식) ===== */
-  var ctx = null, master = null, timer = 0, loopStart = 0, idx = 0, playing = false, audio = null;
-  events.sort(function(a, b){ return a[0] - b[0]; });
+  var ctx = null, master = null, timer = 0, loopStart = 0, idx = 0, playing = false, song = null, audio = null, swap = 0;
+  function want(){ return SONGS[root.classList.contains('intro') ? 'adventure' : 'calm']; }
   function tick(){
-    var ahead = ctx.currentTime + 0.4;
+    var ev = song.events, ahead = ctx.currentTime + 0.4;
     while (true) {
-      if (idx >= events.length) { idx = 0; loopStart += LOOP; }
-      var e = events[idx], t = loopStart + e[0] * STEP;
+      if (idx >= ev.length) { idx = 0; loopStart += song.loop; }
+      var e = ev[idx], t = loopStart + e[0];
       if (t > ahead) break;
       if (t >= ctx.currentTime - 0.02) voice(ctx, master, e, t);
       idx++;
     }
   }
-  function start(){
-    if (playing) return;
-    playing = true;
-    if (SRC) {
-      if (!audio) { audio = new Audio(SRC); audio.loop = true; audio.volume = VOL; }
+  function fade(to, sec){
+    var now = ctx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(master.gain.value, now);
+    master.gain.linearRampToValueAtTime(to, now + sec);
+  }
+  // 지금 화면에 맞는 곡을 처음부터 틀어요
+  function begin(){
+    song = want();
+    if (song.src) {
+      if (!song.audio) { song.audio = new Audio(song.src); song.audio.loop = true; song.audio.volume = VOL; }
+      audio = song.audio; audio.currentTime = 0;
       audio.play().catch(function(){ playing = false; render(); });
-      return render();
+      return;
     }
     var AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) { playing = false; return; }
+    if (!AC) { playing = false; return render(); }
     if (!ctx) {
-      ctx = new AC(); master = ctx.createGain();
+      ctx = new AC(); master = ctx.createGain(); master.gain.value = 0;
       var lp = ctx.createBiquadFilter(); // 귀가 덜 따갑게 고음을 살짝 깎아요
       lp.type = 'lowpass'; lp.frequency.value = 6000; master.connect(lp); lp.connect(ctx.destination);
     }
     if (ctx.state !== 'running') ctx.resume();
-    master.gain.cancelScheduledValues(ctx.currentTime);
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(VOL, ctx.currentTime + 0.8);
+    fade(VOL, 0.8);
     loopStart = ctx.currentTime + 0.1; idx = 0;
     clearInterval(timer); timer = setInterval(tick, 50); tick();
-    render();
+  }
+  // 지금 곡을 살살 줄이며 멈춰요
+  function end(sec){
+    clearTimeout(swap);
+    if (audio) { audio.pause(); audio = null; }
+    if (timer) { clearInterval(timer); timer = 0; fade(0, sec); }
+  }
+  function start(){
+    if (playing) return;
+    playing = true; begin(); render();
   }
   function stop(){
     if (!playing) return;
-    playing = false;
-    if (audio) audio.pause();
-    if (ctx) {
-      clearInterval(timer); timer = 0;
-      master.gain.cancelScheduledValues(ctx.currentTime);
-      master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-      master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
-      setTimeout(function(){ if (!playing && ctx) ctx.suspend(); }, 200);
-    }
-    render();
+    playing = false; end(0.15); render();
+    setTimeout(function(){ if (!playing && ctx) ctx.suspend(); }, 200);
   }
+  // 프롤로그 ↔ 청첩장으로 넘어가면 곡을 바꿔요
+  new MutationObserver(function(){
+    if (!playing || want() === song) return;
+    end(FADE);
+    swap = setTimeout(function(){ if (playing) begin(); }, FADE * 1000 + 100);
+  }).observe(root, { attributes: true, attributeFilter: ['class'] });
+
   function render(){
     btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
     btn.setAttribute('aria-label', playing ? '배경음악 끄기' : '배경음악 켜기');
     btn.classList.toggle('off', !playing);
   }
-
   btn.addEventListener('click', function(e){
     e.stopPropagation();
     if (playing) { stop(); store(true); } else { store(false); start(); }
@@ -171,14 +215,15 @@
   });
   render();
 
-  // 미리 듣기 파일 만들 때 쓰는 함수 (한 바퀴를 소리 파일로 뽑아요)
-  window.WQBGM = { loopSeconds: LOOP, renderLoop: function(times){
-    times = times || 1;
-    var offCtx = new OfflineAudioContext(1, Math.ceil(44100 * (LOOP * times + 1)), 44100);
-    var out = offCtx.createGain(); out.gain.value = VOL;
-    var lp = offCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000;
-    out.connect(lp); lp.connect(offCtx.destination);
-    for (var n = 0; n < times; n++) events.forEach(function(e){ voice(offCtx, out, e, 0.05 + n * LOOP + e[0] * STEP); });
-    return offCtx.startRendering();
-  } };
+  // 미리 듣기 파일 만들 때 쓰는 함수 (곡을 소리 파일로 뽑아요)
+  window.WQBGM = { songs: SONGS, now: function(){ return playing && song ? (song === SONGS.calm ? 'calm' : 'adventure') : null; },
+    renderLoop: function(id, times){
+      var s = SONGS[id || 'adventure']; times = times || 1;
+      var off = new OfflineAudioContext(1, Math.ceil(44100 * (s.loop * times + 1.5)), 44100);
+      var out = off.createGain(); out.gain.value = VOL;
+      var lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000;
+      out.connect(lp); lp.connect(off.destination);
+      for (var n = 0; n < times; n++) s.events.forEach(function(e){ voice(off, out, e, 0.05 + n * s.loop + e[0]); });
+      return off.startRendering();
+    } };
 })();
