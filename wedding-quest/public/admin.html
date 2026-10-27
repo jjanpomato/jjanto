@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
 <style>
 :root{
-  --sky1:#b7a3f0; --sky2:#efe8ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
+  --sky1:#d6cbf6; --sky2:#f6f2ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
   --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#4b4066; --red:#c23b4a;
   --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
   --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -192,6 +192,7 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
     <section class="win">
       <div class="win-h"><span>GUESTBOOK</span><span class="ko">방명록</span><span class="n" id="gbCount"></span></div>
       <div class="win-b">
+        <div class="row"><button class="btn sm alt" id="gbCsv" type="button">⬇ 엑셀(CSV)로 받기</button></div>
         <ul class="gb" id="gb"></ul>
         <p class="empty" id="gbEmpty" hidden>아직 방명록이 없어요.</p>
       </div>
@@ -298,9 +299,22 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
     var rows = [['성함', '구분', '참석', '인원', '식사', '응답일시']].concat(state.rsvp.map(function(r){
       return [r.name, SIDE[r.side], r.attend === 'yes' ? '참석' : '불참', r.attend === 'yes' ? r.count : 0, r.attend === 'yes' ? MEAL[r.meal] : '-', new Date(r.at).toLocaleString('ko-KR')];
     }));
+    downloadCsv(rows, 'rsvp');
+  });
+  // 엑셀에서 한글이 깨지지 않게 BOM을 붙여서 저장해요. 파일 이름은 한글이 빠지는 브라우저가 있어서 영어+날짜로
+  function downloadCsv(rows, kind){
+    var d = new Date(), name = 'wedding-' + kind + '-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.csv';
     var csv = '\ufeff' + rows.map(function(r){ return r.map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
-    var a = el('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = '참석여부.csv';
+    var a = el('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  $('gbCsv').addEventListener('click', function(){
+    if (!state) return;
+    // 보관용이라 오래된 글부터
+    var rows = [['이름', '메시지', '작성일시']].concat(state.guestbook.slice().reverse().map(function(e){
+      return [e.name, e.msg, new Date(e.at).toLocaleString('ko-KR')];
+    }));
+    downloadCsv(rows, 'guestbook');
   });
 
   /* ===== 갤러리 ===== */
