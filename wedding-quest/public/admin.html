@@ -10,8 +10,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
 <style>
 :root{
-  --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
-  --tab:#cdbdf8; --accent:#5b3fb8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#4b4066; --red:#c23b4a;
+  --ink:#45283a; --paper:#fffbfc; --paper2:#fbe3ea;
+  --tab:#ffcadb; --accent:#c2255c; --gold:#ffd6e2; --gold-d:#f4a6bd; --rose:#ff7d97; --mute:#5e4552; --red:#c23b4a;
   --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
   --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-pixel:var(--f-display);
@@ -20,8 +20,8 @@
 *{box-sizing:border-box}
 body{margin:0;background:#fff;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;min-height:100vh}
 .wrap{max-width:960px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px}
-.hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
-.hud a{color:#e6dbff}
+.hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(69,40,58,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
+.hud a{color:#ffd6e2}
 .win{background:var(--paper);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 var(--ink),inset 0 -4px 0 var(--paper2);min-width:0}
 .win-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--tab);color:var(--ink);padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .win-h .ko{font-family:var(--f-display);font-size:15px;letter-spacing:0;text-transform:none}
@@ -60,7 +60,7 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
 .empty{margin:0;color:var(--mute);font-size:13px;text-align:center;padding:8px}
 #app{display:flex;flex-direction:column;gap:18px}
 [hidden]{display:none!important}
-.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(43,33,64,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(69,40,58,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .sum{display:flex;gap:8px;flex-wrap:wrap}
 .sum div{flex:1;min-width:120px;border:2px solid var(--ink);border-radius:4px;background:#fff;padding:6px 10px}

@@ -8,13 +8,13 @@ await page.emulateMedia({ reducedMotion: 'reduce' }); // 움직임 없이 정지
 await page.goto(process.env.OG_URL || 'http://localhost:3000/');
 await page.evaluate(() => document.fonts.ready);
 await page.addStyleTag({ content: `
-  html.intro .intro-ov{display:none!important} html.intro body{overflow:visible}
-  body{background:#f4efff} .wrap{max-width:none;padding:0;gap:0}
+  html.intro .intro-ov{display:none!important} html.intro body{overflow:visible} .bgm{display:none!important}
+  body{background:#fff2f6} .wrap{max-width:none;padding:0;gap:0}
   .wrap>*:not(.scene){display:none!important}
   .scene{width:1200px;height:630px;border:0;border-radius:0;box-shadow:none}
   .scene canvas{margin-top:-195px}
   .scene .title{top:9%}
-  .scene h1{font-size:120px;text-shadow:7px 0 #2e2347,-7px 0 #2e2347,0 7px #2e2347,0 -7px #2e2347,7px 7px #2e2347,-7px 7px #2e2347,7px -7px #2e2347,-7px -7px #2e2347,0 14px 0 rgba(43,33,64,.35)}
+  .scene h1{font-size:120px;text-shadow:7px 0 #45283a,-7px 0 #45283a,0 7px #45283a,0 -7px #45283a,7px 7px #45283a,-7px 7px #45283a,7px -7px #45283a,-7px -7px #45283a,0 14px 0 rgba(69,40,58,.35)}
   .scene .date{font-size:34px;border-width:4px;padding:4px 20px;margin-top:22px}
   .tag{top:79%;font-size:30px;padding:10px 16px 8px;border-radius:6px}
 ` });
