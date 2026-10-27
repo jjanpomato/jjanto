@@ -131,8 +131,7 @@ html.intro body{overflow:hidden}
 .intro-ov.bye{opacity:0;transition:opacity .5s}
 .intro-in{max-width:440px;min-height:100%;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
 .intro-hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
-.intro-skip{font:inherit;font-family:var(--f-body);font-size:13px;color:#fff;background:transparent;border:2px dashed #fff;border-radius:20px;padding:2px 12px;cursor:pointer;letter-spacing:0}
-.intro-skip:focus-visible,.intro-ov .btn:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.intro-ov .btn:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
 .stage{display:flex;flex-direction:column;gap:16px}
 .logo{text-align:center;font-family:var(--f-display);font-size:clamp(34px,11vw,46px);line-height:1.05;color:#fff;margin:18px 0 4px;
   text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink),0 6px 0 rgba(43,33,64,.35)}
@@ -238,7 +237,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
 <body>
 <div class="intro-ov" id="intro" role="dialog" aria-modal="true" aria-label="웨딩 퀘스트 프롤로그">
   <div class="intro-in">
-    <div class="intro-hud"><span id="introStep">PROLOGUE</span><button class="intro-skip" id="introSkip" type="button">스킵하고 청첩장 보기 ▸</button></div>
+    <div class="intro-hud"><span id="introStep">PROLOGUE</span></div>
 
     <div class="stage" id="stTitle">
       <h1 class="logo"><small>WEDDING QUEST</small>민수 <span style="color:var(--rose)">♥</span> 상현</h1>
