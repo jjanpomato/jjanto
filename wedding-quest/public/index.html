@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#b7a3f0">
+<meta property="og:title" content="민수와 상현의 결혼 퀘스트">
+<meta property="og:description" content="2028.02.12 SAT · 비렌티 (천안)">
+<title>민수와 상현의 결혼 퀘스트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
+<style>
+/* Layout: one phone-width column of game windows floating over a pixel sky; scene → NPC dialogue → quest log → map → inventory → screenshots */
+:root{
+  --sky1:#b7a3f0; --sky2:#efe8ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
+  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --leaf:#55b947; --mute:#6f6488;
+  --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
+  --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-pixel:"Silkscreen","Courier New",monospace;
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,var(--sky2) 100%);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+.wrap{max-width:440px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:flex;flex-direction:column;gap:18px}
+
+/* HUD */
+.hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
+.hud .dday{color:#e6dbff;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Scene */
+.scene{position:relative;border:3px solid var(--ink);border-radius:6px;overflow:hidden;box-shadow:0 4px 0 var(--ink)}
+.scene canvas{display:block;width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges}
+.scene .title{position:absolute;left:0;right:0;top:7%;text-align:center;pointer-events:none}
+.scene h1{margin:0;font-family:var(--f-display);font-weight:400;font-size:clamp(30px,9vw,40px);line-height:1.1;color:#fff;text-wrap:balance;
+  text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink),0 6px 0 rgba(43,33,64,.35)}
+.scene h1 .h{color:var(--rose)}
+.scene .date{display:inline-block;margin-top:6px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.12em;color:var(--ink);background:var(--gold);border:2px solid var(--ink);padding:1px 8px}
+.tag{position:absolute;top:84%;transform:translateX(-50%);background:rgba(43,33,64,.85);color:#fff;font-size:11px;line-height:1;padding:4px 7px 3px;border-radius:3px;white-space:nowrap;font-family:var(--f-body);font-weight:700}
+.tag.groom{left:40%} .tag.bride{left:60%}
+
+/* Windows */
+.win{background:var(--paper);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 var(--ink),inset 0 -4px 0 var(--paper2)}
+.win-h{display:flex;align-items:center;gap:8px;background:var(--tab);color:#fff;padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.win-h .ko{font-family:var(--f-display);font-size:15px;letter-spacing:0;text-transform:none}
+.win-h .x{margin-left:auto;width:14px;height:14px;border:2px solid #fff;display:grid;place-items:center;font-size:9px;line-height:1}
+.win-b{padding:14px;display:flex;flex-direction:column;gap:12px}
+
+/* Dialogue */
+.dlg{cursor:pointer;user-select:none}
+.dlg .row{display:flex;gap:12px;align-items:flex-start}
+.portrait{flex:none;width:64px;height:64px;border:3px solid var(--ink);border-radius:4px;background:linear-gradient(180deg,#d9ccff,#f4efff);image-rendering:pixelated}
+.speech{min-width:0;flex:1}
+.who{display:inline-block;font-family:var(--f-display);font-size:14px;background:var(--ink);color:#fff;padding:0 8px;border-radius:3px;margin-bottom:4px}
+.line{margin:0;font-size:16px;min-height:3.2em;white-space:pre-line}
+.next{align-self:flex-end;font-family:var(--f-pixel);font-size:11px;color:var(--mute);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.choices{display:flex;gap:8px;flex-wrap:wrap}
+.btn{font:inherit;font-family:var(--f-display);font-size:15px;color:var(--ink);background:var(--gold);border:3px solid var(--ink);border-radius:4px;padding:6px 14px;box-shadow:inset -3px -3px 0 var(--gold-d),0 3px 0 var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:active{transform:translateY(2px);box-shadow:inset -3px -3px 0 var(--gold-d),0 1px 0 var(--ink)}
+.btn:focus-visible,.skip:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.btn.alt{background:#fff;box-shadow:inset -3px -3px 0 var(--paper2),0 3px 0 var(--ink)}
+.btn.sm{font-size:13px;padding:3px 10px}
+.skip{align-self:center;font-family:var(--f-body);font-size:13px;color:var(--ink);background:rgba(255,255,255,.7);border:2px dashed var(--ink);border-radius:20px;padding:4px 14px;cursor:pointer;margin-top:-6px}
+
+/* Quest */
+.qname{font-family:var(--f-display);font-size:20px;line-height:1.3;margin:0;text-wrap:balance}
+.qname small{display:block;font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:var(--tab)}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:15px}
+.stats dt{font-family:var(--f-display);color:var(--mute)}
+.stats dd{margin:0;min-width:0}
+.reward{display:flex;gap:8px;flex-wrap:wrap}
+.item{display:flex;align-items:center;gap:6px;background:#fff;border:2px solid var(--ink);border-radius:4px;padding:3px 8px 3px 4px;font-size:13px}
+.item i{width:20px;height:20px;display:grid;place-items:center;background:var(--paper2);border:2px solid var(--ink);font-style:normal;font-size:11px;line-height:1}
+
+.cal{border:2px solid var(--ink);border-radius:4px;background:#fff;padding:8px}
+.cal-h{text-align:center;font-family:var(--f-pixel);font-size:12px;letter-spacing:.1em;margin-bottom:6px}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-family:var(--f-pixel);font-size:12px;gap:2px;font-variant-numeric:tabular-nums}
+.cal-g .dow{color:var(--mute);font-size:10px}
+.cal-g .sun{color:#d9455f} .cal-g .sat{color:var(--tab)}
+.cal-g .on{background:var(--rose);color:#fff;border:2px solid var(--ink);border-radius:3px;position:relative}
+.cal-g .on::after{content:"♥";position:absolute;top:-11px;left:50%;transform:translateX(-50%);color:var(--rose);font-size:10px}
+
+.note{font-size:12px;color:var(--mute);margin:0}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Accounts */
+.acc{border:2px solid var(--ink);border-radius:4px;background:#fff}
+.acc summary{list-style:none;cursor:pointer;padding:8px 10px;font-family:var(--f-display);font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.acc summary::-webkit-details-marker{display:none}
+.acc summary::after{content:"▼";font-size:10px}
+.acc[open] summary::after{content:"▲"}
+.acc ul{list-style:none;margin:0;padding:0 10px 10px;display:flex;flex-direction:column;gap:8px}
+.acc li{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:2px dotted var(--paper2);padding-top:8px}
+.acc .num{min-width:0;font-size:13px}
+.acc .num b{display:block;font-size:14px}
+
+/* Screenshots */
+.shots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.shot{aspect-ratio:3/4;max-width:100%;border:2px solid var(--ink);border-radius:3px;background:repeating-linear-gradient(45deg,var(--paper2) 0 6px,#fff 6px 12px);display:grid;place-items:center;font-family:var(--f-pixel);font-size:10px;color:var(--mute);letter-spacing:.08em}
+
+.ranks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ranks li{display:grid;grid-template-columns:28px 40px 1fr;align-items:center;gap:8px;background:#fff;border:2px solid var(--ink);border-radius:4px;padding:5px 8px}
+.medal{width:24px;height:24px;display:grid;place-items:center;border:2px solid var(--ink);border-radius:50%;font-family:var(--f-pixel);font-size:11px;font-weight:700}
+.m1{background:#ffd95a}.m2{background:#e3e3ef}.m3{background:#e8b98a}
+.rk{font-family:var(--f-display)} .pz{min-width:0}
+footer{text-align:center;font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;color:var(--mute)}
+
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(43,33,64,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s;z-index:20}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){.next{animation:none}.toast{transition:none}}
+
+[hidden]{display:none!important}
+
+/* Event announcement */
+.announce{border:3px solid var(--ink);border-radius:4px;background:linear-gradient(180deg,#fff6d6,#fff);padding:10px;display:flex;flex-direction:column;gap:8px}
+.announce h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:17px;display:flex;align-items:center;gap:8px}
+.announce h3 small{font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:#fff;background:var(--rose);border:2px solid var(--ink);padding:0 6px}
+.ranks .win-name{font-family:var(--f-display);color:#c23b4a}
+
+/* Guestbook preview */
+.gb-preview{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.gb-preview li{background:#fff;border:2px solid var(--ink);border-radius:4px;padding:6px 10px;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.gb-preview b{font-family:var(--f-display);font-weight:400;margin-right:6px}
+
+/* Game-window dialogs */
+dialog.pop{padding:0;border:0;background:transparent;width:min(440px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:visible;color:var(--ink)}
+dialog.pop::backdrop{background:rgba(46,35,71,.55)}
+dialog.pop .win{max-height:calc(100dvh - 40px);display:flex;flex-direction:column}
+dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
+.win-h .close{margin-left:auto;font:inherit;font-family:var(--f-pixel);font-size:11px;color:#fff;background:transparent;border:2px solid #fff;width:24px;height:24px;display:grid;place-items:center;cursor:pointer;padding:0}
+.win-h .close:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.form{display:flex;flex-direction:column;gap:10px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-family:var(--f-display);font-size:14px;color:var(--mute)}
+.field input,.field textarea{font:inherit;font-size:16px;color:var(--ink);background:#fff;border:2px solid var(--ink);border-radius:4px;padding:7px 10px;width:100%;min-width:0}
+.field textarea{min-height:88px;resize:vertical}
+.field input:focus-visible,.field textarea:focus-visible{outline:3px solid var(--rose);outline-offset:1px}
+.count{align-self:flex-end;font-family:var(--f-pixel);font-size:10px;color:var(--mute);font-variant-numeric:tabular-nums}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+.msg-err{margin:0;font-size:13px;color:#c23b4a}
+.sep{border:0;border-top:3px dotted var(--paper2);margin:2px 0}
+.gb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gb-list li{background:#fff;border:2px solid var(--ink);border-radius:4px;padding:8px 10px;min-width:0}
+.gb-list .meta{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.gb-list .meta b{font-family:var(--f-display);font-weight:400;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.gb-list .meta time{flex:none;font-family:var(--f-pixel);font-size:10px;color:var(--mute)}
+.gb-list p{margin:2px 0 0;font-size:14px;white-space:pre-line;overflow-wrap:anywhere}
+.empty{margin:0;text-align:center;font-size:13px;color:var(--mute);padding:10px 0}
+.slots{display:flex;gap:6px;align-items:center;font-family:var(--f-pixel);font-size:11px;color:var(--mute)}
+.slots i{width:16px;height:16px;border:2px solid var(--ink);border-radius:2px;background:#fff;font-style:normal}
+.slots i.used{background:var(--rose)}
+.slots i.pick{background:var(--gold)}
+.picker{position:relative;border:3px dashed var(--ink);border-radius:4px;background:#fff;padding:14px;text-align:center;font-family:var(--f-display);font-size:15px;cursor:pointer}
+.picker input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.picker:focus-within{outline:3px solid var(--rose);outline-offset:2px}
+.thumbs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.thumbs figure{margin:0;position:relative;aspect-ratio:1;border:2px solid var(--ink);border-radius:3px;overflow:hidden;background:var(--paper2)}
+.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .st{position:absolute;inset:auto 0 0 0;font-family:var(--f-pixel);font-size:9px;text-align:center;color:#fff;background:rgba(46,35,71,.8);line-height:1.6}
+.thumbs .rm{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;border:2px solid var(--ink);border-radius:3px;background:#fff;font-size:11px;line-height:1;cursor:pointer;color:var(--ink)}
+.bar{height:12px;border:2px solid var(--ink);border-radius:3px;background:#fff;overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,var(--rose) 0 6px,#ff9fae 6px 12px);transition:width .2s}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>WEDDING QUEST</span><span>결혼식까지 <span class="dday" id="dday">D-?</span></span></div>
+
+  <div class="scene">
+    <canvas id="scene" width="160" height="110" aria-label="도트 캐릭터 민수와 상현이 꽃밭 위에 나란히 서 있는 장면"></canvas>
+    <div class="title"><h1>민수 <span class="h">♥</span> 상현</h1><span class="date">2028.02.12 SAT</span></div>
+    <span class="tag groom">민수</span><span class="tag bride">상현</span>
+  </div>
+
+  <section class="win dlg" id="dlg" aria-live="polite">
+    <div class="win-h"><span>NPC TALK</span><span class="x">×</span></div>
+    <div class="win-b">
+      <div class="row">
+        <canvas class="portrait" id="portrait" width="32" height="32" aria-hidden="true"></canvas>
+        <div class="speech"><span class="who" id="who">상현</span><p class="line" id="line"></p></div>
+      </div>
+      <div class="choices" id="choices" hidden>
+        <button class="btn" id="yes" type="button">수락한다</button>
+        <button class="btn alt" id="no" type="button">조금 생각해볼게</button>
+      </div>
+      <span class="next" id="next">▼ 터치해서 계속</span>
+    </div>
+  </section>
+  <button class="skip" id="skip" type="button">대화 건너뛰고 정보 바로 보기 ▾</button>
+
+  <section class="win" id="quest">
+    <div class="win-h"><span>QUEST</span><span class="ko">퀘스트 알림</span><span class="x">!</span></div>
+    <div class="win-b">
+      <h2 class="qname"><small>MAIN QUEST</small>민수와 상현의 결혼식에 참석하라</h2>
+      <dl class="stats">
+        <dt>일시</dt><dd>2028년 2월 12일 토요일 오전 11시</dd>
+        <dt>장소</dt><dd>비렌티 (천안) · 홀 이름 입력 예정</dd>
+        <dt>의뢰인</dt><dd>신랑 민수 · 신부 상현</dd>
+      </dl>
+      <div class="cal" aria-label="2028년 2월 달력, 12일 표시">
+        <div class="cal-h">2028 . 02</div>
+        <div class="cal-g" id="cal"></div>
+      </div>
+      <div>
+        <p class="note" style="margin-bottom:6px">완료 보상</p>
+        <div class="reward">
+          <span class="item"><i>🍽</i>맛있는 한 끼</span>
+          <span class="item"><i>♥</i>평생 감사 +∞</span>
+          <span class="item"><i>★</i>추억 스크린샷</span>
+        </div>
+      </div>
+      <div class="btns">
+        <a class="btn sm" id="gcal" target="_blank" rel="noopener">캘린더에 저장</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="win-h"><span>WORLD MAP</span><span class="ko">오시는 길</span></div>
+    <div class="win-b">
+      <dl class="stats">
+        <dt>주소</dt><dd>주소 입력 예정</dd>
+        <dt>주차</dt><dd>주차 안내 입력 예정</dd>
+      </dl>
+      <div class="btns">
+        <a class="btn sm" href="https://map.naver.com/p/search/%EB%B9%84%EB%A0%8C%ED%8B%B0%20%EC%B2%9C%EC%95%88" target="_blank" rel="noopener">네이버 지도</a>
+        <a class="btn sm" href="https://map.kakao.com/?q=%EB%B9%84%EB%A0%8C%ED%8B%B0%20%EC%B2%9C%EC%95%88" target="_blank" rel="noopener">카카오맵</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="win-h"><span>INVENTORY</span><span class="ko">마음 전하실 곳</span></div>
+    <div class="win-b">
+      <details class="acc">
+        <summary>신랑측</summary>
+        <ul>
+          <li><span class="num"><b>신랑 민수</b>○○은행 계좌번호 입력 예정</span><button class="btn sm alt copy" type="button" data-v="○○은행 계좌번호 입력 예정">복사</button></li>
+        </ul>
+      </details>
+      <details class="acc">
+        <summary>신부측</summary>
+        <ul>
+          <li><span class="num"><b>신부 상현</b>○○은행 계좌번호 입력 예정</span><button class="btn sm alt copy" type="button" data-v="○○은행 계좌번호 입력 예정">복사</button></li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+  <section class="win" id="event">
+    <div class="win-h"><span>EVENT</span><span class="ko">베스트 샷 이벤트</span><span class="x">!</span></div>
+    <div class="win-b">
+      <h2 class="qname"><small>SIDE QUEST</small>결혼식 날 찍은 사진을 보내줘</h2>
+      <div class="announce" id="announce" hidden>
+        <h3><small>RESULT</small>베스트 샷 결과 발표!</h3>
+        <p class="note">축하드려요! 당첨되신 분께는 저희가 따로 연락드릴게요.</p>
+      </div>
+      <p style="margin:0">결혼식 날 찍은 사진을 올려 주세요. 저희가 가장 마음에 드는 사진 3장을 골라 선물을 드려요.</p>
+      <ol class="ranks" id="ranks">
+        <li><span class="medal m1">1</span><span class="rk">1등</span><span class="pz">치킨 (3만 원 상당)</span></li>
+        <li><span class="medal m2">2</span><span class="rk">2등</span><span class="pz">올리브영 상품권 (2만 원 상당)</span></li>
+        <li><span class="medal m3">3</span><span class="rk">3등</span><span class="pz">커피 (1만 원 상당)</span></li>
+      </ol>
+      <dl class="stats">
+        <dt>기간</dt><dd id="evPeriod">예식 당일 ~ 마감일</dd>
+        <dt>발표</dt><dd>발표일 입력 예정 · 당첨자에게 개별 연락</dd>
+      </dl>
+      <p class="note">한 사람당 최대 5장 · 올린 사진은 신랑·신부만 볼 수 있어요.</p>
+      <div class="btns"><button class="btn sm" id="openUpload" type="button">사진 올리러 가기</button></div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="win-h"><span>GUESTBOOK</span><span class="ko">방명록</span></div>
+    <div class="win-b">
+      <p style="margin:0">두 사람에게 축하 한마디를 남겨 주세요. 하나하나 다 읽을게요!</p>
+      <ul class="gb-preview" id="gbPreview" hidden></ul>
+      <div class="btns"><button class="btn sm" id="openGuestbook" type="button">방명록 쓰러 가기</button></div>
+    </div>
+  </section>
+
+  <section class="win">
+    <div class="win-h"><span>SCREENSHOT</span><span class="ko">우리의 순간</span></div>
+    <div class="win-b">
+      <div class="shots"><div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div><div class="shot">COMING<br>SOON</div></div>
+      <p class="note">웨딩 촬영이 끝나면 사진이 저장될 슬롯이에요.</p>
+    </div>
+  </section>
+
+  <footer>MINSU ♥ SANGHYUN · NEW GAME START</footer>
+</div>
+
+<dialog class="pop" id="gbDialog" aria-labelledby="gbTitle">
+  <div class="win">
+    <div class="win-h"><span>GUESTBOOK</span><span class="ko" id="gbTitle">방명록</span><button class="close" type="button" data-close aria-label="닫기">×</button></div>
+    <div class="win-b">
+      <form class="form" id="gbForm" novalidate>
+        <div class="field">
+          <label for="gbName">이름 (닉네임)</label>
+          <input id="gbName" name="name" maxlength="20" autocomplete="nickname" required placeholder="예) 신랑 친구 철수">
+        </div>
+        <div class="field">
+          <label for="gbMsg">축하 메시지</label>
+          <textarea id="gbMsg" name="message" maxlength="200" required placeholder="두 사람에게 하고 싶은 말을 남겨 주세요"></textarea>
+          <span class="count" id="gbCount">0/200</span>
+        </div>
+        <div class="hp" aria-hidden="true"><label>웹사이트<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <p class="msg-err" id="gbErr" role="alert" hidden></p>
+        <button class="btn" id="gbSubmit" type="submit">♥ 메시지 남기기</button>
+      </form>
+      <hr class="sep">
+      <ul class="gb-list" id="gbList" aria-live="polite"></ul>
+      <p class="empty" id="gbEmpty" hidden>아직 메시지가 없어요. 첫 번째 축하를 남겨 주세요!</p>
+      <button class="btn sm alt" id="gbMore" type="button" hidden style="align-self:center">더 보기 ▾</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="pop" id="upDialog" aria-labelledby="upTitle">
+  <div class="win">
+    <div class="win-h"><span>EVENT</span><span class="ko" id="upTitle">베스트 샷 올리기</span><button class="close" type="button" data-close aria-label="닫기">×</button></div>
+    <div class="win-b">
+      <p class="msg-err" id="upClosed" hidden></p>
+      <form class="form" id="upForm" novalidate>
+        <div class="field">
+          <label for="upName">이름 (닉네임)</label>
+          <input id="upName" name="name" maxlength="20" autocomplete="nickname" required placeholder="당첨되면 이 이름으로 찾아갈게요">
+        </div>
+        <div class="slots" id="upSlots" aria-live="polite"></div>
+        <label class="picker" id="upPicker">📷 사진 고르기 (여러 장 가능)
+          <input id="upFile" type="file" accept="image/*" multiple>
+        </label>
+        <div class="thumbs" id="upThumbs"></div>
+        <div class="bar" id="upBar" hidden><span></span></div>
+        <div class="hp" aria-hidden="true"><label>웹사이트<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <p class="msg-err" id="upErr" role="alert" hidden></p>
+        <button class="btn" id="upSubmit" type="submit" disabled>★ 사진 보내기</button>
+        <p class="note">사진은 보내기 전에 자동으로 크기를 줄이고, 위치 정보도 지워져요. 올린 사진은 신랑·신부만 볼 수 있어요.</p>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var WEDDING = new Date(2028,1,12,11,0,0);
+
+  /* D-day */
+  var today = new Date(); today.setHours(0,0,0,0);
+  var wd = new Date(2028,1,12); var diff = Math.round((wd - today)/86400000);
+  document.getElementById('dday').textContent = diff > 0 ? 'D-' + diff : (diff === 0 ? 'D-DAY' : 'CLEAR');
+
+  /* Calendar: Feb 2028 starts Tuesday, 29 days */
+  var cal = document.getElementById('cal'), h = '';
+  ['일','월','화','수','목','금','토'].forEach(function(d,i){h += '<span class="dow'+(i===0?' sun':i===6?' sat':'')+'">'+d+'</span>';});
+  var start = new Date(2028,1,1).getDay();
+  for (var i=0;i<start;i++) h += '<span></span>';
+  for (var d=1; d<=29; d++){ var dow=(start+d-1)%7; h += '<span class="'+(d===12?'on':dow===0?'sun':dow===6?'sat':'')+'">'+d+'</span>'; }
+  cal.innerHTML = h;
+
+  document.getElementById('gcal').href = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' +
+    encodeURIComponent('민수 ♥ 상현 결혼식') + '&dates=20280212T020000Z/20280212T040000Z&location=' + encodeURIComponent('비렌티 천안');
+
+  /* Sprites: left halves, mirrored */
+  function mirror(a){return a.map(function(r){return r + r.split('').reverse().join('');});}
+  var groom = mirror([
+    "......oo","....oohh","...ohhhh","..ohhhhh","..ohhhhh",".ohhhhhh",".ohhssss",".ohsssss",
+    ".osssess",".osssess",".oscssss","..osssss","...ooooo","....onnt","...onnnb","..onnnnt",
+    "..onnnnt","..osnnnn","...onnnn","....onno","....onno","...okkko"]);
+  var bride = mirror([
+    "......oo","....oohh","...ohhhh","..ovhhhh","..ovhhhh",".ovhhhhh",".ovhhsss",".ovhssss",
+    ".ovhsess",".ovhsess",".ovhcsss",".ovhhsss",".ovhhooo",".ovhowww",".ovowwww",".ovowwww",
+    "..owwwww",".owswwfw",".owwwwww","owwwwwww","owwwwwww","oooooooo"]);
+  var base = {o:'#2b2140',s:'#ffd9b8',e:'#2a1e24',c:'#ff9fae',n:'#2c3e7a',t:'#ffffff',b:'#c23b4a',k:'#1d1d24',w:'#ffffff',v:'#dfeaff',f:'#ff7d97'};
+  function pal(hair){var p={};for(var k in base)p[k]=base[k];p.h=hair;return p;}
+  var PB = pal('#7a4a2e'), PG = pal('#2b2b3a');
+  function drawSprite(ctx,spr,p,x,y,s,rows){
+    s=s||1; rows=rows||spr.length;
+    for(var r=0;r<rows;r++){var line=spr[r];for(var c=0;c<line.length;c++){var ch=line[c];if(ch==='.')continue;ctx.fillStyle=p[ch];ctx.fillRect(x+c*s,y+r*s,s,s);}}
+  }
+
+  /* Scene */
+  var cv = document.getElementById('scene'), g = cv.getContext('2d');
+  var W=160,H=110,GY=90;
+  var heart = [".oo.oo.","orrorro","orrrrro",".orrro.","..oro..","...o..."];
+  var clouds = [{x:10,y:40,s:1},{x:95,y:30,s:1},{x:135,y:48,s:0}];
+  var petals = []; for (var i=0;i<9;i++) petals.push({x:Math.random()*W,y:Math.random()*GY,v:.12+Math.random()*.15,p:Math.random()*6});
+  function cloud(x,y,big){
+    g.fillStyle='#ffffff';
+    var w=big?22:16; g.fillRect(x,y,w,4); g.fillRect(x+3,y-3,w-8,3); g.fillRect(x+6,y-5,6,2);
+    g.fillStyle='#e4dcfb'; g.fillRect(x,y+3,w,1);
+  }
+  function frame(t){
+    var sky=g.createLinearGradient(0,0,0,GY); sky.addColorStop(0,'#a993ee'); sky.addColorStop(1,'#eee6ff');
+    g.fillStyle=sky; g.fillRect(0,0,W,H);
+    clouds.forEach(function(c){ var x = ((c.x + t*0.004*(c.s?1:0.6)) % (W+30)) - 25; cloud(Math.round(x),c.y,c.s); });
+    /* stepped hills */
+    g.fillStyle='#9fdc8c';
+    [[0,78,40],[8,74,24],[14,71,12],[110,76,50],[118,72,30],[126,69,14]].forEach(function(r){g.fillRect(r[0],r[1],r[2],GY-r[1]);});
+    g.fillStyle='#86cc74'; g.fillRect(0,84,W,6);
+    /* ground */
+    g.fillStyle='#5cc14a'; g.fillRect(0,GY,W,3);
+    g.fillStyle='#3e9a34'; for(var x=0;x<W;x+=4){g.fillRect(x,GY+3,2,1);}
+    g.fillStyle='#c98a4b'; g.fillRect(0,GY+4,W,H-GY-4);
+    g.fillStyle='#a86c35'; for(var yy=GY+7;yy<H;yy+=5){for(var xx=(yy%2)*3;xx<W;xx+=7){g.fillRect(xx,yy,2,1);}}
+    /* flowers */
+    [[20,'#c9a7ff'],[34,'#ffffff'],[118,'#b18cf5'],[134,'#ffffff'],[146,'#c9a7ff'],[8,'#ff9fbd']].forEach(function(f){
+      g.fillStyle='#3e9a34'; g.fillRect(f[0],GY-2,1,2); g.fillStyle=f[1]; g.fillRect(f[0]-1,GY-4,3,1); g.fillRect(f[0],GY-5,1,3);
+    });
+    /* characters */
+    var bob = reduce?0:Math.round((Math.sin(t/420)+1)/2);
+    var bob2 = reduce?0:Math.round((Math.sin(t/420+1.6)+1)/2);
+    drawSprite(g,groom,PG,56,GY-22-bob+1);
+    drawSprite(g,bride,PB,88,GY-22-bob2+1);
+    /* heart */
+    var hy = 56 + (reduce?0:Math.round(Math.sin(t/300)*2));
+    var hp={o:'#2b2140',r:'#ff6b88'};
+    drawSprite(g,heart,hp,76,hy);
+    /* petals */
+    if(!reduce){ petals.forEach(function(p){ p.y+=p.v; p.p+=.02; if(p.y>GY){p.y=-2;p.x=Math.random()*W;} g.fillStyle=(p.p|0)%2?'#ffffff':'#d6c2ff'; g.fillRect(Math.round(p.x+Math.sin(p.p)*3),Math.round(p.y),2,1); }); }
+  }
+  if (reduce) frame(0); else (function loop(t){frame(t||0);requestAnimationFrame(loop);})();
+
+  /* Portrait */
+  var pc = document.getElementById('portrait').getContext('2d');
+  function portrait(who){
+    pc.clearRect(0,0,32,32);
+    if(who==='상현') drawSprite(pc,bride,PB,0,2,2,15); else drawSprite(pc,groom,PG,0,2,2,15);
+  }
+
+  /* Dialogue */
+  /* ===== 대사 수정은 여기서! w = 말하는 사람(민수/상현), t = 대사(\n은 줄바꿈) ===== */
+  var script = [
+    {w:'상현',t:'어? 여기까지 찾아와 줬구나!\n정말 반가워 :)'},
+    {w:'민수',t:'우리 둘이 오래 같은 파티로\n모험해 왔잖아.'},
+    {w:'상현',t:'이제 평생 같은 파티로\n함께 가기로 했어!'},
+    {w:'민수',t:'그래서 아주 중요한 퀘스트가 하나 생겼어.\n네가 꼭 함께해 줬으면 좋겠어.'},
+    {w:'상현',t:'우리 결혼식 퀘스트, 받아줄래?',choice:true}
+  ];
+  var after = {
+    yes:{w:'민수',t:'고마워! 자세한 내용은\n아래 퀘스트 창에 적어뒀어.'},
+    no:{w:'상현',t:'그럴 줄 알고 아래에 다 적어놨지 ㅎㅎ\n천천히 보고 와줘!'}
+  };
+  var idx=0, typing=null, full='', done=false, end=false;
+  var lineEl=document.getElementById('line'), whoEl=document.getElementById('who'), nextEl=document.getElementById('next'), chEl=document.getElementById('choices');
+  function show(item){
+    whoEl.textContent=item.w; portrait(item.w); full=item.t; chEl.hidden=true; nextEl.hidden=true;
+    clearInterval(typing);
+    if(reduce){ lineEl.textContent=full; finish(item); return; }
+    var n=0; lineEl.textContent=''; done=false;
+    typing=setInterval(function(){ n++; lineEl.textContent=full.slice(0,n); if(n>=full.length){finish(item);} },32);
+    show.cur=item;
+  }
+  function finish(item){
+    clearInterval(typing); lineEl.textContent=full; done=true;
+    if(item.choice){chEl.hidden=false;} else if(!end){nextEl.hidden=false;}
+  }
+  document.getElementById('dlg').addEventListener('click',function(e){
+    if(e.target.closest('button')) return;
+    if(!done){ finish(show.cur); return; }
+    if(end || script[idx].choice) return;
+    idx++; show(script[idx]);
+  });
+  function choose(k){
+    end=true; show(after[k]);
+    if(k==='yes') toast('퀘스트 [민수와 상현의 결혼식]을 수락했습니다!');
+    setTimeout(function(){ document.getElementById('quest').scrollIntoView({behavior:reduce?'auto':'smooth',block:'start'}); }, reduce?0:1400);
+  }
+  document.getElementById('yes').addEventListener('click',function(){choose('yes');});
+  document.getElementById('no').addEventListener('click',function(){choose('no');});
+  document.getElementById('skip').addEventListener('click',function(){ document.getElementById('quest').scrollIntoView({behavior:reduce?'auto':'smooth'}); });
+  show(script[0]);
+
+  /* Toast + copy */
+  var tEl=document.getElementById('toast'), tT;
+  function toast(m){ tEl.textContent=m; tEl.classList.add('show'); clearTimeout(tT); tT=setTimeout(function(){tEl.classList.remove('show');},2400); }
+  window.toast = toast;
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var v=b.getAttribute('data-v'), numEl=b.previousElementSibling;
+      function fallback(){ var r=document.createRange(); r.selectNodeContents(numEl); var s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('계좌번호를 선택했어요. 길게 눌러 복사해 주세요.'); }
+      try{ navigator.clipboard.writeText(v).then(function(){toast('계좌번호를 복사했어요.');},fallback); }catch(e){ fallback(); }
+    });
+  });
+})();
+</script>
+<script src="/guest.js" defer></script>
+</body>
+</html>

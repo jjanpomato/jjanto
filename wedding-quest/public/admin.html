@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>결혼 퀘스트 관리실</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
+<style>
+:root{
+  --sky1:#b7a3f0; --sky2:#efe8ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
+  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#6f6488; --red:#c23b4a;
+  --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
+  --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-pixel:"Silkscreen","Courier New",monospace;
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 360px,var(--sky2) 100%);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;min-height:100vh}
+.wrap{max-width:960px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px}
+.hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
+.hud a{color:#e6dbff}
+.win{background:var(--paper);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 var(--ink),inset 0 -4px 0 var(--paper2);min-width:0}
+.win-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--tab);color:#fff;padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.win-h .ko{font-family:var(--f-display);font-size:15px;letter-spacing:0;text-transform:none}
+.win-h .n{margin-left:auto;font-variant-numeric:tabular-nums}
+.win-b{padding:14px;display:flex;flex-direction:column;gap:12px}
+.btn{font:inherit;font-family:var(--f-display);font-size:14px;color:var(--ink);background:var(--gold);border:3px solid var(--ink);border-radius:4px;padding:4px 12px;box-shadow:inset -3px -3px 0 var(--gold-d),0 3px 0 var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:active{transform:translateY(2px);box-shadow:inset -3px -3px 0 var(--gold-d),0 1px 0 var(--ink)}
+.btn:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+.btn.alt{background:#fff;box-shadow:inset -3px -3px 0 var(--paper2),0 3px 0 var(--ink)}
+.btn.danger{background:#ffd6dc;box-shadow:inset -3px -3px 0 #f3a9b5,0 3px 0 var(--ink)}
+.btn.sm{font-size:12px;padding:1px 8px}
+.btn[disabled]{opacity:.55;cursor:wait}
+.note{font-size:13px;color:var(--mute);margin:0}
+.err{margin:0;color:var(--red);font-size:13px}
+input[type=password]{font:inherit;font-size:16px;border:2px solid var(--ink);border-radius:4px;padding:7px 10px;width:100%;background:#fff;color:var(--ink)}
+.login{max-width:360px;width:100%;margin:40px auto 0}
+.login form{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.stat{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0}
+.stat dt{font-family:var(--f-display);color:var(--mute)} .stat dd{margin:0;min-width:0}
+.pill{display:inline-block;font-family:var(--f-pixel);font-size:10px;letter-spacing:.08em;border:2px solid var(--ink);border-radius:3px;padding:0 6px;background:#fff}
+.pill.on{background:var(--rose);color:#fff}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.podium .slot{border:2px solid var(--ink);border-radius:4px;background:#fff;padding:6px;display:flex;flex-direction:column;gap:4px;align-items:center;text-align:center;min-width:0}
+.podium .slot img{width:100%;aspect-ratio:1;object-fit:cover;border:2px solid var(--ink);border-radius:3px;background:var(--paper2)}
+.podium .slot .ph{width:100%;aspect-ratio:1;border:2px dashed var(--mute);border-radius:3px;display:grid;place-items:center;font-family:var(--f-pixel);font-size:10px;color:var(--mute)}
+.podium b{font-family:var(--f-display);font-weight:400;overflow-wrap:anywhere}
+.medal{width:24px;height:24px;display:grid;place-items:center;border:2px solid var(--ink);border-radius:50%;font-family:var(--f-pixel);font-size:11px;font-weight:700}
+.m1{background:#ffd95a}.m2{background:#e3e3ef}.m3{background:#e8b98a}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{border:2px solid var(--ink);border-radius:4px;background:#fff;display:flex;flex-direction:column;min-width:0;position:relative}
+.card.r1{outline:4px solid #ffd95a}.card.r2{outline:4px solid #c9c9dc}.card.r3{outline:4px solid #e8b98a}
+.card a.img{display:block;aspect-ratio:1;background:var(--paper2);border-bottom:2px solid var(--ink)}
+.card img{width:100%;height:100%;object-fit:cover;display:block}
+.card .badge{position:absolute;top:6px;left:6px}
+.card .info{padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+.card .who{font-family:var(--f-display);overflow-wrap:anywhere;line-height:1.3}
+.card .who small{display:block;font-family:var(--f-body);font-size:11px;color:var(--mute)}
+.ranks{display:flex;gap:4px;flex-wrap:wrap}
+.ranks .btn.sel{background:var(--rose);color:#fff}
+.gb{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gb li{border:2px solid var(--ink);border-radius:4px;background:#fff;padding:8px 10px;display:flex;gap:10px;align-items:flex-start;min-width:0}
+.gb .body{flex:1;min-width:0}
+.gb b{font-family:var(--f-display);font-weight:400}
+.gb time{font-family:var(--f-pixel);font-size:10px;color:var(--mute);margin-left:6px}
+.gb p{margin:2px 0 0;font-size:14px;white-space:pre-line;overflow-wrap:anywhere}
+.empty{margin:0;color:var(--mute);font-size:13px;text-align:center;padding:8px}
+#app{display:flex;flex-direction:column;gap:18px}
+[hidden]{display:none!important}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:rgba(43,33,64,.92);color:#fff;border:2px solid var(--gold);border-radius:4px;padding:8px 14px;font-size:13px;max-width:calc(100% - 32px);text-align:center;transition:.25s}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>WEDDING QUEST · ADMIN</span><span><a href="/">청첩장 보기</a> · <a href="#" id="logout" hidden>로그아웃</a></span></div>
+
+  <section class="win login" id="loginBox">
+    <div class="win-h"><span>LOGIN</span><span class="ko">관리실 입장</span></div>
+    <div class="win-b">
+      <form id="loginForm">
+        <label for="pw" class="note">관리자 비밀번호</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <p class="err" id="loginErr" hidden></p>
+        <button class="btn" type="submit" id="loginBtn">입장하기</button>
+      </form>
+    </div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="win">
+      <div class="win-h"><span>RESULT</span><span class="ko">베스트 샷 선정 · 발표</span></div>
+      <div class="win-b">
+        <dl class="stat">
+          <dt>업로드 기간</dt><dd id="period"></dd>
+          <dt>발표 상태</dt><dd id="pubState"></dd>
+        </dl>
+        <div class="podium" id="podium"></div>
+        <div class="row">
+          <button class="btn" id="publish" type="button"></button>
+          <span class="note" id="pubHint"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="win">
+      <div class="win-h"><span>PHOTOS</span><span class="ko">올라온 사진</span><span class="n" id="photoCount"></span></div>
+      <div class="win-b">
+        <p class="note">사진을 누르면 원본 크기로 열려요. 1·2·3 버튼으로 등수를 정하고, 같은 등수를 다른 사진에 누르면 바뀌어요.</p>
+        <div class="grid" id="photos"></div>
+        <p class="empty" id="photosEmpty" hidden>아직 올라온 사진이 없어요.</p>
+      </div>
+    </section>
+
+    <section class="win">
+      <div class="win-h"><span>GUESTBOOK</span><span class="ko">방명록</span><span class="n" id="gbCount"></span></div>
+      <div class="win-b">
+        <ul class="gb" id="gb"></ul>
+        <p class="empty" id="gbEmpty" hidden>아직 방명록이 없어요.</p>
+      </div>
+    </section>
+    <div class="row"><button class="btn alt" id="reload" type="button">↻ 새로고침</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  var token = null, state = null;
+  try { token = sessionStorage.getItem('wq_admin'); } catch (e) {}
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, text){ var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  var tEl = $('toast'), tT;
+  function toast(m){ tEl.textContent = m; tEl.classList.add('show'); clearTimeout(tT); tT = setTimeout(function(){ tEl.classList.remove('show'); }, 2400); }
+  function fmt(ms){ var d = new Date(ms); return (d.getMonth()+1) + '.' + d.getDate() + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+  function fmtDay(iso){ var k = new Date(new Date(iso).getTime() + 9*3600000); return k.getUTCFullYear() + '.' + String(k.getUTCMonth()+1).padStart(2,'0') + '.' + String(k.getUTCDate()).padStart(2,'0'); }
+  function photoUrl(id, dl){ return '/api/admin/photo?id=' + encodeURIComponent(id) + '&t=' + encodeURIComponent(token) + (dl ? '&dl=1' : ''); }
+
+  function api(path, body){
+    return fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: Object.assign({ 'Authorization': 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(b){
+        if (r.status === 401) { logout(); throw new Error(b.error || '다시 로그인해 주세요.'); }
+        if (!r.ok) throw new Error(b.error || '실패했어요.');
+        return b;
+      });
+    });
+  }
+  function act(body, btn){
+    if (btn) btn.disabled = true;
+    return api('/api/admin/data', body).then(function(s){ state = s; render(); })
+      .catch(function(e){ toast(e.message); })
+      .then(function(){ if (btn) btn.disabled = false; });
+  }
+
+  function render(){
+    var s = state, rankOf = {};
+    s.results.winners.forEach(function(w){ rankOf[w.photoId] = w.rank; });
+    $('period').textContent = fmtDay(s.event.start) + ' ~ ' + fmtDay(s.event.end) + (s.event.open ? ' · 진행 중' : s.event.before ? ' · 시작 전' : ' · 마감');
+    $('pubState').innerHTML = '';
+    $('pubState').appendChild(el('span', 'pill' + (s.results.published ? ' on' : ''), s.results.published ? 'PUBLISHED' : 'HIDDEN'));
+    $('pubState').appendChild(document.createTextNode(s.results.published ? ' 청첩장 이벤트 창에 당첨자 이름이 보여요' : ' 아직 하객에게는 안 보여요'));
+    $('publish').textContent = s.results.published ? '발표 내리기' : '📢 청첩장에 발표하기';
+    $('publish').disabled = !s.results.published && s.results.winners.length === 0;
+    $('pubHint').textContent = !s.results.published && s.results.winners.length === 0 ? '먼저 아래 사진에서 등수를 정해 주세요.' : '';
+
+    var pod = $('podium'); pod.textContent = '';
+    [1, 2, 3].forEach(function(r){
+      var w = s.results.winners.find(function(x){ return x.rank === r; });
+      var slot = el('div', 'slot');
+      slot.appendChild(el('span', 'medal m' + r, String(r)));
+      if (w) { var img = el('img'); img.src = photoUrl(w.photoId); img.alt = r + '등 사진'; img.loading = 'lazy'; slot.appendChild(img); slot.appendChild(el('b', null, w.name)); }
+      else { slot.appendChild(el('div', 'ph', 'EMPTY')); slot.appendChild(el('span', 'note', '미정')); }
+      pod.appendChild(slot);
+    });
+
+    var grid = $('photos'); grid.textContent = '';
+    $('photoCount').textContent = s.photos.length + '장';
+    $('photosEmpty').hidden = s.photos.length > 0;
+    s.photos.forEach(function(p){
+      var r = rankOf[p.id] || 0;
+      var card = el('div', 'card' + (r ? ' r' + r : ''));
+      var a = el('a', 'img'); a.href = photoUrl(p.id); a.target = '_blank'; a.rel = 'noopener';
+      var img = el('img'); img.src = photoUrl(p.id); img.alt = p.name + '님 사진'; img.loading = 'lazy';
+      a.appendChild(img); card.appendChild(a);
+      if (r) { var b = el('span', 'medal m' + r + ' badge', String(r)); card.appendChild(b); }
+      var info = el('div', 'info');
+      var who = el('div', 'who', p.name); who.appendChild(el('small', null, fmt(p.at) + ' · ' + Math.round(p.size / 1024) + 'KB · 기기 ' + p.dev));
+      info.appendChild(who);
+      var ranks = el('div', 'ranks');
+      [1, 2, 3].forEach(function(n){
+        var rb = el('button', 'btn sm' + (r === n ? ' sel' : ' alt'), n + '등'); rb.type = 'button';
+        rb.addEventListener('click', function(){ act({ action: 'setRank', id: p.id, rank: r === n ? 0 : n }, rb); });
+        ranks.appendChild(rb);
+      });
+      info.appendChild(ranks);
+      var row = el('div', 'row');
+      var dl = el('a', 'btn sm alt', '저장'); dl.href = photoUrl(p.id, true);
+      var del = el('button', 'btn sm danger', '삭제'); del.type = 'button';
+      del.addEventListener('click', function(){ if (confirm(p.name + '님의 사진을 삭제할까요? 되돌릴 수 없어요.')) act({ action: 'deletePhoto', id: p.id }, del); });
+      row.appendChild(dl); row.appendChild(del); info.appendChild(row);
+      card.appendChild(info); grid.appendChild(card);
+    });
+
+    var gb = $('gb'); gb.textContent = '';
+    $('gbCount').textContent = s.guestbook.length + '개';
+    $('gbEmpty').hidden = s.guestbook.length > 0;
+    s.guestbook.forEach(function(e){
+      var li = el('li'), body = el('div', 'body'), head = el('div');
+      head.appendChild(el('b', null, e.name)); head.appendChild(el('time', null, fmt(e.at)));
+      body.appendChild(head); body.appendChild(el('p', null, e.msg)); li.appendChild(body);
+      var del = el('button', 'btn sm danger', '삭제'); del.type = 'button';
+      del.addEventListener('click', function(){ if (confirm(e.name + '님의 메시지를 삭제할까요?')) act({ action: 'deleteEntry', id: e.id }, del); });
+      li.appendChild(del); gb.appendChild(li);
+    });
+  }
+
+  function enter(){
+    $('loginBox').hidden = true; $('app').hidden = false; $('logout').hidden = false;
+    return api('/api/admin/data').then(function(s){ state = s; render(); }).catch(function(e){ toast(e.message); });
+  }
+  function logout(){
+    token = null; try { sessionStorage.removeItem('wq_admin'); } catch (e) {}
+    $('app').hidden = true; $('loginBox').hidden = false; $('logout').hidden = true;
+  }
+  $('loginForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var btn = $('loginBtn'), err = $('loginErr'); btn.disabled = true; err.hidden = true;
+    fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) })
+      .then(function(r){ return r.json().then(function(b){ if (!r.ok) throw new Error(b.error || '로그인 실패'); return b; }); })
+      .then(function(b){ token = b.token; try { sessionStorage.setItem('wq_admin', token); } catch (e) {} $('pw').value = ''; return enter(); })
+      .catch(function(x){ err.textContent = x.message; err.hidden = false; })
+      .then(function(){ btn.disabled = false; });
+  });
+  $('logout').addEventListener('click', function(e){ e.preventDefault(); logout(); });
+  $('reload').addEventListener('click', function(){ act(null, this); });
+  $('publish').addEventListener('click', function(){
+    var pub = !state.results.published;
+    if (pub && !confirm('당첨자 이름을 청첩장에 공개할까요?')) return;
+    act({ action: 'publish', published: pub }, this);
+  });
+  if (token) enter();
+})();
+</script>
+</body>
+</html>

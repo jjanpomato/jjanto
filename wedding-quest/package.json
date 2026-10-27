@@ -1,0 +1,16 @@
+{
+  "name": "wedding-quest",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "qr": "node scripts/qr.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.8.2"
+  },
+  "devDependencies": {
+    "qrcode": "1.5.4"
+  },
+  "engines": { "node": "22.x" }
+}
