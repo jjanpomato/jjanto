@@ -49,6 +49,7 @@
   function applyConfig(cfg){
     setOpenchat(cfg);
     renderAccounts(cfg.accounts);
+    renderInvite(cfg.invite);
     renderGallery(cfg.gallery || []);
     $('evPeriod').textContent = fmtDay(cfg.event.start) + ' ~ ' + fmtDay(cfg.event.end) + (cfg.event.open ? ' (진행 중!)' : '');
     if (cfg.results && cfg.results.length) {
@@ -240,4 +241,14 @@
     }).catch(function(x){ showErr(err, x.message); })
       .then(function(){ btn.disabled = false; });
   });
+
+  /* ===== STEP 0 인사말 · 부모님 (관리자 페이지에서 입력) ===== */
+  function renderInvite(v){
+    if (!v) return;
+    if (v.greeting) $('greet').textContent = v.greeting;
+    if (v.groomParents) $('pGroom').textContent = v.groomParents;
+    if (v.brideParents) $('pBride').textContent = v.brideParents;
+    if (v.groomRel) $('rGroom').textContent = '의 ' + v.groomRel;
+    if (v.brideRel) $('rBride').textContent = '의 ' + v.brideRel;
+  }
 })();

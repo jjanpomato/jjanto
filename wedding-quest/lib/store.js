@@ -120,10 +120,11 @@ export const FILES = {
   guestbook: 'data/guestbook.json',
   rsvp: 'data/rsvp.json',
   gallery: 'data/gallery.json',
-  // 오픈채팅 링크 + 당첨자 발표 + 계좌 정보
+  // 오픈채팅 링크 + 당첨자 발표 + 계좌 정보 + 인사말·부모님
   event: 'data/event.json',
 };
 
-export const EMPTY_EVENT = { openchatUrl: '', published: false, winners: [], accounts: { groom: [], bride: [] } };
+export const EMPTY_INVITE = { greeting: '', groomParents: '', groomRel: '', brideParents: '', brideRel: '' };
+export const EMPTY_EVENT = { openchatUrl: '', published: false, winners: [], accounts: { groom: [], bride: [] }, invite: EMPTY_INVITE };
 
 export const galleryPath = (id, size) => `gallery/${id}-${size}.jpg`;

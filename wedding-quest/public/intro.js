@@ -60,9 +60,9 @@
 
   /* ===== 애니메이션 ===== */
   var cv = $('introCv'), g = cv.getContext('2d'), raf = 0, t0 = 0, last = -1;
-  var END = 7600;
+  var END = 7600, SLOW = 2; // 대사를 읽을 수 있게 전체를 2배 느리게 재생해요
   var lines = [
-    [0,    '나레이션', '서로 다른 마을에서 홀로 모험하던\n민수와 상현.'],
+    [0,    '나레이션', '홀로 모험하던\n민수와 상현.'],
     [1200, '나레이션', '좁은 길모퉁이를 돌던 그 순간—'],
     [2400, '민수', '쿵!! 앗, 죄송합니…'],
     [3300, '상현', '……!'],
@@ -141,7 +141,7 @@
   }
   function loop(now){
     if (!t0) t0 = now;
-    var t = now - t0;
+    var t = (now - t0) / SLOW;
     scene(t);
     say(t);
     raf = requestAnimationFrame(loop);
@@ -153,7 +153,7 @@
   }
   function stop(){ cancelAnimationFrame(raf); raf = 0; }
   // 화면을 누르면 애니메이션을 끝까지 넘겨요
-  cv.addEventListener('click', function(){ if (raf) t0 = performance.now() - END; });
+  cv.addEventListener('click', function(){ if (raf) t0 = performance.now() - END * SLOW; });
 
   /* ===== 입장 퀴즈 ===== */
   var tries = 0;

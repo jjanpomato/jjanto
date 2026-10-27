@@ -77,6 +77,16 @@ export async function POST(request) {
     await updateJson(FILES.event, EMPTY_EVENT, (ev) => {
       ev.accounts = accounts;
     });
+  } else if (action === 'setInvite') {
+    // 인사말(비우면 기본 문구) + 부모님 성함/관계
+    const v = body.invite || {};
+    const greeting = cleanText(v.greeting, 400, { multiline: true });
+    const gp = cleanText(v.groomParents, 40), gr = cleanText(v.groomRel, 10);
+    const bp = cleanText(v.brideParents, 40), brr = cleanText(v.brideRel, 10);
+    for (const f of [greeting, gp, gr, bp, brr]) if (f.value && !f.ok) return fail('글자 수를 확인해 주세요. (인사말 400자, 성함 40자, 관계 10자)');
+    await updateJson(FILES.event, EMPTY_EVENT, (ev) => {
+      ev.invite = { greeting: greeting.value, groomParents: gp.value, groomRel: gr.value, brideParents: bp.value, brideRel: brr.value };
+    });
   } else if (action === 'setOpenchat') {
     // 빈 값이면 링크 해제. 카카오 오픈채팅 주소만 받아요
     const url = String(body.url || '').trim();

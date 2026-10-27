@@ -11,7 +11,7 @@
 <style>
 :root{
   --sky1:#b7a3f0; --sky2:#efe8ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
-  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#6f6488; --red:#c23b4a;
+  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#4b4066; --red:#c23b4a;
   --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
   --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-pixel:"Silkscreen","Courier New",monospace;
@@ -83,6 +83,8 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
 .accrow{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:6px}
 #app .accrow input{font-size:14px;padding:6px 8px}
 @media (max-width:520px){.accrow{grid-template-columns:1fr 1fr}.accrow input:last-child{grid-column:1/-1}}
+#app textarea{font:inherit;font-size:15px;border:2px solid var(--ink);border-radius:4px;padding:7px 10px;width:100%;background:#fff;color:var(--ink);resize:vertical}
+.accrow.two{grid-template-columns:2fr 1fr}
 </style>
 </head>
 <body>
@@ -102,6 +104,22 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
   </section>
 
   <div id="app" hidden>
+    <section class="win">
+      <div class="win-h"><span>STEP 0</span><span class="ko">인사말 · 부모님</span></div>
+      <div class="win-b">
+        <form id="invForm" class="accf">
+          <label class="note" for="invGreet">인사말 (비워 두면 기본 인사말이 나가요 · 줄바꿈 그대로 보여요)</label>
+          <textarea id="invGreet" maxlength="400" rows="7"></textarea>
+          <b>신랑 민수</b>
+          <div class="accrow two"><input id="invGP" maxlength="40" placeholder="부모님 성함 (예: 김OO · 이OO)"><input id="invGR" maxlength="10" placeholder="관계 (예: 아들, 장남)"></div>
+          <b>신부 상현</b>
+          <div class="accrow two"><input id="invBP" maxlength="40" placeholder="부모님 성함 (예: 박OO · 최OO)"><input id="invBR" maxlength="10" placeholder="관계 (예: 딸, 장녀)"></div>
+          <p class="note">청첩장에는 “김OO · 이OO의 아들 민수”처럼 보여요. 고인이신 분은 성함 앞에 故를 붙여 주세요.</p>
+          <button class="btn" type="submit" id="invSave">인사말 저장</button>
+        </form>
+      </div>
+    </section>
+
     <section class="win">
       <div class="win-h"><span>RSVP</span><span class="ko">참석 여부</span><span class="n" id="rsvpCount"></span></div>
       <div class="win-b">
@@ -239,6 +257,7 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
 
     renderRsvp(s.rsvp); renderGallery(s.gallery);
     if (!accDirty) fillAccounts(st.accounts || { groom: [], bride: [] });
+    if (!invDirty) fillInvite(st.invite || {});
 
     var gb = $('gb'); gb.textContent = '';
     $('gbCount').textContent = s.guestbook.length + '개';
@@ -340,6 +359,17 @@ input[type=password],#app input{font:inherit;font-size:16px;border:2px solid var
         .then(function(){ done++; }, function(e){ failed++; toast(e.message); })
         .then(next);
     })();
+  });
+
+  /* ===== 인사말 · 부모님 ===== */
+  var invDirty = false, INV = { invGreet: 'greeting', invGP: 'groomParents', invGR: 'groomRel', invBP: 'brideParents', invBR: 'brideRel' };
+  function fillInvite(v){ for (var id in INV) $(id).value = v[INV[id]] || ''; }
+  Object.keys(INV).forEach(function(id){ $(id).addEventListener('input', function(){ invDirty = true; }); });
+  $('invForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var v = {}; for (var id in INV) v[INV[id]] = $(id).value;
+    invDirty = false;
+    act({ action: 'setInvite', invite: v }, $('invSave')).then(function(ok){ if (ok) toast('인사말을 저장했어요.'); else invDirty = true; });
   });
 
   /* ===== 계좌 ===== */
