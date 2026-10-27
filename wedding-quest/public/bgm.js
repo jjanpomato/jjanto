@@ -1,5 +1,5 @@
 /* 배경음악: 브라우저에서 바로 연주하는 8비트 BGM 두 곡 (음악 파일 없음, 직접 작곡한 곡)
-   - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 8비트 결혼 행진곡이 나와요
+   - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 웨딩 왈츠가 나와요
    - 휴대폰은 화면을 한 번 눌러야 소리가 나서, 첫 터치(모험 시작·청첩장 바로 보기 등) 때 시작해요
    - 오른쪽 아래 ♪ 버튼으로 끄고 켤 수 있고, 끈 상태는 그 기기에 기억해요
    - 나중에 MP3로 바꾸려면 public/에 파일을 넣고 아래 곡의 src에 경로를 적으면 돼요 (예: '/bgm.mp3') */
@@ -25,24 +25,29 @@
       'F5 2','A5 2','D6 2','C6 1','A5 1',  'B5 2','D6 2','G5 2','A5 1','B5 1',
       'E6 2','D6 1','C6 1','B5 2','D6 2',  'C6 6','. 2'
     ], chords: ['C','Am','F','G','C','Em','F G','C','F','G','Em','Am','Dm','G','C','C'] },
-    // 청첩장 곡: 바그너 「결혼 행진곡」(저작권 만료) 8비트 편곡 + 결혼식 종소리
-    // 같은 8마디를 두 번 돌고, 두 번째엔 오르골이 한 옥타브 위에서 멜로디를 같이 불러요
-    calm: { src: '', bpm: 80, lead: 0, double: 64, melody: [].concat.apply([], [0, 1].map(function(){ return [
-      'G4 2','C5 1.5','C5 0.5','C5 4',     'G4 2','D5 1.5','B4 0.5','C5 4',
-      'G4 2','C5 1.5','F5 0.5','F5 2','E5 1.5','D5 0.5',  'C5 2','B4 1.5','C5 0.5','D5 4',
-      'G4 2','C5 1.5','E5 0.5','G5 2','E5 1.5','C5 0.5',  'A4 2','C5 1.5','F5 0.5','A5 4',
-      'G5 2','F5 1.5','E5 0.5','D5 2','E5 1.5','F5 0.5',  'E5 4','C5 2','. 2'
-    ]; })), chords: ['C','G C','C F','G','C','F','G','C','C','G C','C F','G','C','F','G','C'] }
+    // 청첩장 곡: 3박자 웨딩 왈츠 (쿵-짝-짝 반주, 4마디마다 결혼식 종소리)
+    // 9마디부터는 오르골이 한 옥타브 위에서 멜로디를 같이 불러요
+    wedding: { src: '', bpm: 144, lead: -1, beats: 6, double: 48, melody: [
+      // A: 두근두근 첫 만남
+      'D6 4','B5 2',  'B5 4','F#5 2',  'E6 4','C6 2',  'B5 2','A5 4',
+      'G5 2','B5 2','D6 2',  'G6 4','E6 2',  'E6 2','D6 2','C6 2',  'A5 6',
+      // A': 조금 더 애틋하게
+      'D6 4','B5 2',  'B5 4','F#5 2',  'E6 4','C6 2',  'Eb6 4','C6 2',
+      'B5 2','D6 2','G6 2',  'G6 3','F#6 1','E6 2',  'E6 2','C#6 2','A5 2',  'D6 6',
+      // B: 함께 걸어가는 길
+      'B5 4','G5 2',  'F#5 4','B5 2',  'G5 2','C6 2','E6 2',  'D6 4','B5 2',
+      'E6 3','D6 1','C6 2',  'B5 2','A5 2','F#5 2',  'G5 6',  '. 6'
+    ], chords: ['G','Bm','C','D','G','Em','Am','D', 'G','Bm','C','Cm','G','Em','A','D', 'Em','Bm','C','G','Am','D','G','G'] }
   };
-  var CH = { C:['C','E','G'], Am:['A','C','E'], F:['F','A','C'], G:['G','B','D'], Em:['E','G','B'], Dm:['D','F','A'], Bb:['Bb','D','F'] };
+  var CH = { C:['C','E','G'], Am:['A','C','E'], F:['F','A','C'], G:['G','B','D'], Em:['E','G','B'], Dm:['D','F','A'], Bm:['B','D','F#'], Cm:['C','Eb','G'], D:['D','F#','A'], A:['A','C#','E'] };
   var SEMI = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
-  function semi(name){ return SEMI[name[0]] - (name[1] === 'b' ? 1 : 0); }
+  function semi(name){ return SEMI[name[0]] + (name[1] === '#' ? 1 : name[1] === 'b' ? -1 : 0); }
   function hz(name, oct){ return 440 * Math.pow(2, (semi(name) + (oct + 1) * 12 - 69) / 12); }
   function noteHz(s){ var n = s.replace(/\d+$/, ''); return hz(n, +s.slice(n.length)); }
 
   // 악보를 [시작 초, 길이 초, 주파수, 악기] 목록으로 펼쳐 둬요
   Object.keys(SONGS).forEach(function(id){
-    var song = SONGS[id], step = 60 / song.bpm / 2, ev = [], pos = 0, calm = id === 'calm';
+    var song = SONGS[id], step = 60 / song.bpm / 2, ev = [], pos = 0, bl = song.beats || 8;
     function add(at, len, f, kind){ ev.push([at * step, len * step, f, kind]); }
     song.melody.forEach(function(m){
       var p = m.split(' '), len = +p[1];
@@ -55,14 +60,13 @@
     });
     song.chords.forEach(function(c, bar){
       c.split(' ').forEach(function(name, half, all){
-        var span = 8 / all.length, at = bar * 8 + half * span, tones = CH[name];
+        var span = bl / all.length, at = bar * bl + half * span, tones = CH[name];
         var r2 = hz(tones[0], 2), f2 = hz(tones[2], semi(tones[2]) < semi(tones[0]) ? 3 : 2);
-        if (calm) {
-          // 마디 첫 박엔 결혼식 종소리 '댕~', 베이스는 근음·5음을 길게, 반주는 오르골처럼 화음을 한 음씩 굴려요
-          if (!half) add(at, 10, hz(tones[0], 5), 'chime');
-          for (var b = 0; b < span; b += 4) add(at + b, Math.min(4, span - b), b ? f2 : r2, 'sub');
-          var up = [hz(tones[0], 3), f2 * 2, hz(tones[1], 4), f2 * 4];
-          [0, 1, 2, 3, 2, 1, 2, 3].slice(0, span).forEach(function(k, i){ add(at + i, 2, up[k], 'bell'); });
+        if (bl === 6) {
+          // 왈츠: 첫 박에 베이스 '쿵', 둘째·셋째 박에 화음 '짝 짝' (짝수 마디는 5음 베이스로 출렁이게)
+          if (bar % 4 === 0) add(at, 14, hz(tones[0], 5), 'chime');
+          add(at, 2, bar % 2 ? f2 : r2, 'sub');
+          [2, 4].forEach(function(b){ tones.forEach(function(t){ add(at + b, 1, hz(t, 4), 'pad'); }); });
         } else {
           // 베이스: 근음·5음을 통통 번갈아 / 반주: 엇박에 화음을 콕콕 / 하이햇
           for (var i = 0; i < span; i += 2) add(at + i, 1.6, i % 4 ? f2 : r2, 'bass');
@@ -74,7 +78,7 @@
       });
     });
     song.events = ev.sort(function(a, b){ return a[0] - b[0]; });
-    song.loop = song.chords.length * 8 * step;
+    song.loop = song.chords.length * bl * step;
   });
 
   /* ===== 악기 ===== */
@@ -140,7 +144,7 @@
 
   /* ===== 재생 (조금씩 미리 예약하는 방식) ===== */
   var ctx = null, master = null, timer = 0, loopStart = 0, idx = 0, playing = false, song = null, audio = null, swap = 0;
-  function want(){ return SONGS[root.classList.contains('intro') ? 'adventure' : 'calm']; }
+  function want(){ return SONGS[root.classList.contains('intro') ? 'adventure' : 'wedding']; }
   function tick(){
     var ev = song.events, ahead = ctx.currentTime + 0.4;
     while (true) {
@@ -227,7 +231,7 @@
   render();
 
   // 미리 듣기 파일 만들 때 쓰는 함수 (곡을 소리 파일로 뽑아요)
-  window.WQBGM = { songs: SONGS, now: function(){ return playing && song ? (song === SONGS.calm ? 'calm' : 'adventure') : null; },
+  window.WQBGM = { songs: SONGS, now: function(){ return playing && song ? (song === SONGS.wedding ? 'wedding' : 'adventure') : null; },
     renderLoop: function(id, times){
       var s = SONGS[id || 'adventure']; times = times || 1;
       var off = new OfflineAudioContext(1, Math.ceil(44100 * (s.loop * times + 1.5)), 44100);
