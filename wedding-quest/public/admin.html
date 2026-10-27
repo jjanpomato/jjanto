@@ -7,23 +7,23 @@
 <title>결혼 퀘스트 관리실</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
 <style>
 :root{
-  --sky1:#d6cbf6; --sky2:#f6f2ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
-  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#4b4066; --red:#c23b4a;
+  --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
+  --tab:#cdbdf8; --accent:#5b3fb8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --mute:#4b4066; --red:#c23b4a;
   --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
   --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-  --f-pixel:"Silkscreen","Courier New",monospace;
+  --f-pixel:var(--f-display);
   color-scheme: light;
 }
 *{box-sizing:border-box}
-body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 360px,var(--sky2) 100%);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;min-height:100vh}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;min-height:100vh}
 .wrap{max-width:960px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px}
 .hud{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(46,35,71,.82);color:#fff;border:3px solid var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-pixel);font-size:12px;letter-spacing:.06em}
 .hud a{color:#e6dbff}
 .win{background:var(--paper);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 var(--ink),inset 0 -4px 0 var(--paper2);min-width:0}
-.win-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--tab);color:#fff;padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.win-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--tab);color:var(--ink);padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .win-h .ko{font-family:var(--f-display);font-size:15px;letter-spacing:0;text-transform:none}
 .win-h .n{margin-left:auto;font-variant-numeric:tabular-nums}
 .win-b{padding:14px;display:flex;flex-direction:column;gap:12px}

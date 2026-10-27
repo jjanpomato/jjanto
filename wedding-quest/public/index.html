@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#d6cbf6">
+<meta name="theme-color" content="#ffffff">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://wedding-quest-seven.vercel.app/">
 <meta property="og:title" content="민수와 상현의 결혼 퀘스트">
@@ -22,19 +22,19 @@ document.documentElement.classList.add('intro');
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Silkscreen:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
 <style>
 /* Layout: one phone-width column of game windows floating over a pixel sky; HUD → main quest title → scene → STEP 1~6 → inventory */
 :root{
-  --sky1:#d6cbf6; --sky2:#f6f2ff; --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
-  --tab:#8a6fd8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --leaf:#55b947; --mute:#4b4066;
+  --ink:#2e2347; --paper:#fdfbff; --paper2:#ece4fb;
+  --tab:#cdbdf8; --accent:#5b3fb8; --gold:#d8c8ff; --gold-d:#b39cf0; --rose:#ff7d97; --leaf:#55b947; --mute:#4b4066;
   --f-display:"Jua","Gowun Dodum",system-ui,sans-serif;
   --f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-  --f-pixel:"Silkscreen","Courier New",monospace;
+  --f-pixel:var(--f-display);
   color-scheme: light;
 }
 *{box-sizing:border-box}
-body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,var(--sky2) 100%);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
 .wrap{max-width:440px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:flex;flex-direction:column;gap:18px}
 
 /* HUD */
@@ -54,9 +54,9 @@ body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,
 
 /* Windows */
 .win{background:var(--paper);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 var(--ink),inset 0 -4px 0 var(--paper2)}
-.win-h{display:flex;align-items:center;gap:8px;background:var(--tab);color:#fff;padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.win-h{display:flex;align-items:center;gap:8px;background:var(--tab);color:var(--ink);padding:5px 10px;border-bottom:3px solid var(--ink);font-family:var(--f-pixel);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .win-h .ko{font-family:var(--f-display);font-size:15px;letter-spacing:0;text-transform:none}
-.win-h .x{margin-left:auto;width:14px;height:14px;border:2px solid #fff;display:grid;place-items:center;font-size:9px;line-height:1}
+.win-h .x{margin-left:auto;width:14px;height:14px;border:2px solid var(--ink);display:grid;place-items:center;font-size:9px;line-height:1}
 .win-b{padding:14px;display:flex;flex-direction:column;gap:12px}
 
 /* Dialogue text (prologue) */
@@ -72,7 +72,7 @@ body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,
 
 /* Quest */
 .qname{font-family:var(--f-display);font-size:20px;line-height:1.3;margin:0;text-wrap:balance}
-.qname small{display:block;font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:var(--tab)}
+.qname small{display:block;font-family:var(--f-pixel);font-size:10px;letter-spacing:.12em;color:var(--accent)}
 .stats{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:15px}
 .stats dt{font-family:var(--f-display);color:var(--mute)}
 .stats dd{margin:0;min-width:0}
@@ -84,7 +84,7 @@ body{margin:0;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,
 .cal-h{text-align:center;font-family:var(--f-pixel);font-size:12px;letter-spacing:.1em;margin-bottom:6px}
 .cal-g{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-family:var(--f-pixel);font-size:12px;gap:2px;font-variant-numeric:tabular-nums}
 .cal-g .dow{color:var(--mute);font-size:11px}
-.cal-g .sun{color:#d9455f} .cal-g .sat{color:var(--tab)}
+.cal-g .sun{color:#d9455f} .cal-g .sat{color:var(--accent)}
 .cal-g .on{background:var(--rose);color:#fff;border:2px solid var(--ink);border-radius:3px;position:relative}
 .cal-g .on::after{content:"♥";position:absolute;top:-11px;left:50%;transform:translateX(-50%);color:var(--rose);font-size:10px}
 
@@ -125,7 +125,7 @@ footer{text-align:center;font-family:var(--f-pixel);font-size:11px;letter-spacin
 .ranks .win-name{font-family:var(--f-display);color:#5b3fb8}
 
 /* Prologue overlay */
-.intro-ov{display:none;position:fixed;inset:0;z-index:30;background:linear-gradient(180deg,var(--sky1) 0,var(--sky2) 520px,var(--sky2) 100%);overflow-y:auto;overscroll-behavior:contain}
+.intro-ov{display:none;position:fixed;inset:0;z-index:30;background:#fff;overflow-y:auto;overscroll-behavior:contain}
 html.intro .intro-ov{display:block}
 html.intro body{overflow:hidden}
 .intro-ov.bye{opacity:0;transition:opacity .5s}
@@ -163,7 +163,7 @@ html.intro body{overflow:hidden}
 /* Main quest title */
 .mq{margin:4px 0 -4px;text-align:center;font-family:var(--f-display);font-weight:400;font-size:clamp(30px,9.5vw,40px);line-height:1.15;color:#fff;text-wrap:balance;
   text-shadow:3px 0 var(--ink),-3px 0 var(--ink),0 3px var(--ink),0 -3px var(--ink),3px 3px var(--ink),-3px 3px var(--ink),3px -3px var(--ink),-3px -3px var(--ink),0 6px 0 rgba(43,33,64,.35)}
-.mq small{display:table;margin:0 auto 8px;font-family:var(--f-pixel);font-size:11px;letter-spacing:.16em;color:#fff;background:var(--tab);border:2px solid var(--ink);padding:1px 8px;text-shadow:none}
+.mq small{display:table;margin:0 auto 8px;font-family:var(--f-pixel);font-size:11px;letter-spacing:.16em;color:var(--ink);background:var(--tab);border:2px solid var(--ink);padding:1px 8px;text-shadow:none}
 .step{scroll-margin-top:12px}
 .greet{margin:0;text-align:center;font-size:16px;line-height:1.9;white-space:pre-line}
 .parents{border-top:3px dotted var(--paper2);padding-top:12px;display:flex;flex-direction:column;gap:6px;text-align:center}
@@ -215,7 +215,7 @@ dialog.pop{padding:0;border:0;background:transparent;width:min(440px,calc(100% -
 dialog.pop::backdrop{background:rgba(46,35,71,.55)}
 dialog.pop .win{max-height:calc(100dvh - 40px);display:flex;flex-direction:column}
 dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
-.win-h .close{margin-left:auto;font:inherit;font-family:var(--f-pixel);font-size:11px;color:#fff;background:transparent;border:2px solid #fff;width:24px;height:24px;display:grid;place-items:center;cursor:pointer;padding:0}
+.win-h .close{margin-left:auto;font:inherit;font-family:var(--f-pixel);font-size:11px;color:var(--ink);background:transparent;border:2px solid var(--ink);width:24px;height:24px;display:grid;place-items:center;cursor:pointer;padding:0}
 .win-h .close:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
 .form{display:flex;flex-direction:column;gap:10px}
 .field{display:flex;flex-direction:column;gap:4px}
@@ -253,7 +253,7 @@ dialog.pop .win-b{overflow-y:auto;overscroll-behavior:contain}
       <section class="win">
         <div class="win-h"><span>STORY</span><span class="ko">줄거리</span></div>
         <div class="win-b">
-          <p style="margin:0">홀로 모험하던 <b>민수</b>와 <b>상현</b>.<br>어느 날 둘은 그만 <b>“쿵!”</b> 부딪히고 마는데…</p>
+          <p style="margin:0;text-align:center">홀로 모험하던 <b>민수</b>와 <b>상현</b>.<br>어느 날 둘은 그만 <b>“쿵!”</b> 부딪히고 마는데…</p>
           <div class="party">
             <div class="mem"><canvas id="pfThief" width="16" height="20" aria-hidden="true"></canvas><div><b>민수</b><span>LV.96 도적</span></div></div>
             <div class="mem"><canvas id="pfMage" width="16" height="23" aria-hidden="true"></canvas><div><b>상현</b><span>LV.97 마법사</span></div></div>
