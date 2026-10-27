@@ -1,5 +1,5 @@
 /* 배경음악: 브라우저에서 바로 연주하는 8비트 BGM 두 곡 (음악 파일 없음, 직접 작곡한 곡)
-   - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 잔잔한 오르골 곡이 나와요
+   - 프롤로그(모험 애니메이션)에서는 신나는 모험 곡, 청첩장 본문에서는 8비트 결혼 행진곡이 나와요
    - 휴대폰은 화면을 한 번 눌러야 소리가 나서, 첫 터치(모험 시작·청첩장 바로 보기 등) 때 시작해요
    - 오른쪽 아래 ♪ 버튼으로 끄고 켤 수 있고, 끈 상태는 그 기기에 기억해요
    - 나중에 MP3로 바꾸려면 public/에 파일을 넣고 아래 곡의 src에 경로를 적으면 돼요 (예: '/bgm.mp3') */
@@ -25,19 +25,14 @@
       'F5 2','A5 2','D6 2','C6 1','A5 1',  'B5 2','D6 2','G5 2','A5 1','B5 1',
       'E6 2','D6 1','C6 1','B5 2','D6 2',  'C6 6','. 2'
     ], chords: ['C','Am','F','G','C','Em','F G','C','F','G','Em','Am','Dm','G','C','C'] },
-    // 청첩장 곡: 느릿한 오르골 느낌
-    calm: { src: '', bpm: 72, lead: 0, melody: [
-      // A: 같은 길을 걷기로 한 두 사람
-      'C5 2','F5 2','A5 4',                'G5 3','F5 1','E5 2','G5 2',
-      'F5 4','A5 2','D6 2',                'C6 6','Bb5 1','A5 1',
-      'A5 4','G5 2','F5 2',                'G5 4','C6 2','E5 2',
-      'D5 2','F5 2','E5 2','G5 2',         'F5 6','. 2',
-      // B: 소중한 분들께 드리는 인사
-      'D6 3','C6 1','A5 2','F5 2',         'Bb5 3','A5 1','F5 2','D5 2',
-      'C6 3','Bb5 1','A5 2','C6 2',        'G5 6','. 2',
-      'F5 2','Bb5 2','D6 2','C6 1','Bb5 1','A5 2','G5 2','E5 2','G5 2',
-      'G5 2','E5 2','C6 2','Bb5 2',        'F5 8'
-    ], chords: ['F','C','Dm','Bb','F','C','Bb C','F','Dm','Bb','F','C','Bb','C','C','F'] }
+    // 청첩장 곡: 바그너 「결혼 행진곡」(저작권 만료) 8비트 편곡 + 결혼식 종소리
+    // 같은 8마디를 두 번 돌고, 두 번째엔 오르골이 한 옥타브 위에서 멜로디를 같이 불러요
+    calm: { src: '', bpm: 80, lead: 0, double: 64, melody: [].concat.apply([], [0, 1].map(function(){ return [
+      'G4 2','C5 1.5','C5 0.5','C5 4',     'G4 2','D5 1.5','B4 0.5','C5 4',
+      'G4 2','C5 1.5','F5 0.5','F5 2','E5 1.5','D5 0.5',  'C5 2','B4 1.5','C5 0.5','D5 4',
+      'G4 2','C5 1.5','E5 0.5','G5 2','E5 1.5','C5 0.5',  'A4 2','C5 1.5','F5 0.5','A5 4',
+      'G5 2','F5 1.5','E5 0.5','D5 2','E5 1.5','F5 0.5',  'E5 4','C5 2','. 2'
+    ]; })), chords: ['C','G C','C F','G','C','F','G','C','C','G C','C F','G','C','F','G','C'] }
   };
   var CH = { C:['C','E','G'], Am:['A','C','E'], F:['F','A','C'], G:['G','B','D'], Em:['E','G','B'], Dm:['D','F','A'], Bb:['Bb','D','F'] };
   var SEMI = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
@@ -51,7 +46,11 @@
     function add(at, len, f, kind){ ev.push([at * step, len * step, f, kind]); }
     song.melody.forEach(function(m){
       var p = m.split(' '), len = +p[1];
-      if (p[0] !== '.') add(pos, len, noteHz(p[0]) * Math.pow(2, song.lead), calm ? 'soft' : 'lead');
+      if (p[0] !== '.') {
+        var f = noteHz(p[0]) * Math.pow(2, song.lead);
+        add(pos, len, f, 'lead');
+        if (song.double && pos >= song.double) add(pos, Math.max(len, 3), f * 2, 'bell');
+      }
       pos += len;
     });
     song.chords.forEach(function(c, bar){
@@ -59,8 +58,9 @@
         var span = 8 / all.length, at = bar * 8 + half * span, tones = CH[name];
         var r2 = hz(tones[0], 2), f2 = hz(tones[2], semi(tones[2]) < semi(tones[0]) ? 3 : 2);
         if (calm) {
-          // 베이스는 길게 한 번, 반주는 오르골처럼 화음을 한 음씩 굴려요
-          add(at, span, r2, 'sub');
+          // 마디 첫 박엔 결혼식 종소리 '댕~', 베이스는 근음·5음을 길게, 반주는 오르골처럼 화음을 한 음씩 굴려요
+          if (!half) add(at, 10, hz(tones[0], 5), 'chime');
+          for (var b = 0; b < span; b += 4) add(at + b, Math.min(4, span - b), b ? f2 : r2, 'sub');
           var up = [hz(tones[0], 3), f2 * 2, hz(tones[1], 4), f2 * 4];
           [0, 1, 2, 3, 2, 1, 2, 3].slice(0, span).forEach(function(k, i){ add(at + i, 2, up[k], 'bell'); });
         } else {
@@ -100,6 +100,17 @@
       return;
     }
     src = ctx.createOscillator(); src.frequency.value = e[2]; src.connect(g);
+    if (kind === 'chime') {
+      // 종소리: 맑은 기본음에 종 특유의 배음을 살짝 섞어 길게 울려요
+      src.type = 'sine';
+      var o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.type = 'sine'; o2.frequency.value = e[2] * 2.76; o2.connect(g2); g2.connect(g);
+      g2.gain.value = 0.35;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      src.start(t); src.stop(t + dur + 0.02); o2.start(t); o2.stop(t + dur + 0.02);
+      return;
+    }
     if (kind === 'bell') {
       // 오르골: 땡 하고 울린 뒤 천천히 사라지는 소리
       src.type = 'sine';
@@ -110,18 +121,18 @@
     }
     var w = ctx.wqWaves || (ctx.wqWaves = { lead: pulse(ctx, 0.25), pad: pulse(ctx, 0.125) });
     if (w[kind]) src.setPeriodicWave(w[kind]); else src.type = 'triangle';
-    var soft = kind === 'soft' || kind === 'sub';
-    var peak = { lead: 0.2, pad: 0.045, bass: 0.34, soft: 0.3, sub: 0.2 }[kind], hold = peak * (kind === 'lead' ? 0.7 : 0.5);
+    var soft = kind === 'sub';
+    var peak = { lead: 0.2, pad: 0.045, bass: 0.34, sub: 0.2 }[kind], hold = peak * (kind === 'lead' ? 0.7 : 0.5);
     var gate = dur * (soft ? 0.96 : 0.88), rel = soft ? 0.12 : 0.03;
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(peak, t + (soft ? 0.03 : 0.006));
     g.gain.linearRampToValueAtTime(hold, t + Math.min(soft ? 0.4 : 0.12, gate));
     g.gain.setValueAtTime(hold, t + gate);
     g.gain.linearRampToValueAtTime(0, t + gate + rel);
-    if ((kind === 'lead' || kind === 'soft') && dur > 0.5) {
+    if (kind === 'lead' && dur > 0.5) {
       // 긴 음엔 살짝 비브라토
       var lfo = ctx.createOscillator(), lg = ctx.createGain();
-      lfo.frequency.value = soft ? 4.5 : 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(e[2] * 0.008, t + dur);
+      lfo.frequency.value = 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(e[2] * 0.008, t + dur);
       lfo.connect(lg); lg.connect(src.frequency); lfo.start(t); lfo.stop(t + gate + rel + 0.02);
     }
     src.start(t); src.stop(t + gate + rel + 0.02);
